@@ -161,7 +161,41 @@ def train_automl_pipeline(
     # 3. Extract Feature Importance
     feature_importance = _extract_feature_importance(best_model, feature_names)
 
-    # 4. Serialize winning pipeline
+    # 4. Extract raw feature definitions for UI predictor
+    raw_features = []
+    sample_record = {}
+    sample_row = df.dropna().head(1)
+    has_sample = not sample_row.empty
+
+    for col in prep["num_cols"]:
+        s = pd.to_numeric(df[col], errors="coerce").dropna()
+        default_v = round(float(s.median()), 2) if not s.empty else 0.0
+        sample_v = round(float(sample_row[col].values[0]), 2) if has_sample and col in sample_row else default_v
+        raw_features.append({
+            "name": col,
+            "type": "numeric",
+            "default_value": default_v,
+            "min": round(float(s.min()), 2) if not s.empty else 0.0,
+            "max": round(float(s.max()), 2) if not s.empty else 100.0,
+            "sample_value": sample_v,
+        })
+        sample_record[col] = sample_v
+
+    for col in prep["cat_cols"]:
+        s = df[col].dropna().astype(str)
+        unique_vals = [str(v) for v in s.unique()[:15]]
+        default_v = unique_vals[0] if unique_vals else "Missing"
+        sample_v = str(sample_row[col].values[0]) if has_sample and col in sample_row else default_v
+        raw_features.append({
+            "name": col,
+            "type": "categorical",
+            "options": unique_vals,
+            "default_value": default_v,
+            "sample_value": sample_v,
+        })
+        sample_record[col] = sample_v
+
+    # 5. Serialize winning pipeline
     model_filename = f"model_ds_{dataset_id}_{target_column}_{int(time.time())}.joblib"
     model_path = MODELS_DIR / model_filename
 
@@ -177,6 +211,7 @@ def train_automl_pipeline(
         "feature_names": feature_names,
         "num_cols": prep["num_cols"],
         "cat_cols": prep["cat_cols"],
+        "raw_features": raw_features,
         "created_at": time.time(),
     }
     joblib.dump(artifact, model_path)
@@ -190,6 +225,8 @@ def train_automl_pipeline(
         "test_samples": prep["test_samples"],
         "num_features": prep["num_features"],
         "feature_names": feature_names,
+        "raw_features": raw_features,
+        "sample_record": sample_record,
         "target_classes": prep["target_classes"],
         "best_model_name": best_model_name,
         "best_model_score": best_model_info["score"],

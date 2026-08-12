@@ -60,6 +60,10 @@ def predict_sample(model_path: str, input_data: dict[str, Any]) -> dict[str, Any
     raw_pred = model.predict(vector_scaled)[0]
 
     probabilities = None
+    confidence_pct = None
+    verdict = ""
+    explanation = ""
+
     if problem_type == "classification":
         if label_encoder is not None:
             try:
@@ -75,12 +79,29 @@ def predict_sample(model_path: str, input_data: dict[str, Any]) -> dict[str, Any
                 target_classes[i] if i < len(target_classes) else f"Class_{i}": round(float(p), 4)
                 for i, p in enumerate(probs)
             }
+            max_prob = max(probs)
+            confidence_pct = round(float(max_prob * 100), 1)
+
         prediction_val = prediction_label
+        verdict = f"{artifact['target_column']} = {prediction_val}"
+        conf_str = f" with {confidence_pct}% confidence" if confidence_pct is not None else ""
+        explanation = (
+            f"The champion {artifact['model_name']} model classifies this record as '{prediction_val}'{conf_str} "
+            f"based on the provided feature values."
+        )
     else:
         prediction_val = round(float(raw_pred), 4)
+        verdict = f"Predicted {artifact['target_column']} = {prediction_val:,.2f}"
+        explanation = (
+            f"The champion {artifact['model_name']} model estimates a value of {prediction_val:,.2f} "
+            f"for '{artifact['target_column']}' based on the supplied parameters."
+        )
 
     return {
         "prediction": prediction_val,
+        "verdict": verdict,
+        "explanation": explanation,
+        "confidence_pct": confidence_pct,
         "probabilities": probabilities,
         "problem_type": problem_type,
         "model_name": artifact["model_name"],
