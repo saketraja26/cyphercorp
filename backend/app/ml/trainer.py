@@ -31,20 +31,20 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _get_candidate_models(problem_type: str) -> dict[str, Any]:
-    """Return dictionary of candidate models tailored to the problem type."""
+    """Return dictionary of candidate models tailored to the problem type with high-speed parallel execution."""
     if problem_type == "classification":
         return {
-            "Random Forest Classifier": RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42),
-            "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, max_depth=4, random_state=42),
-            "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+            "Random Forest Classifier": RandomForestClassifier(n_estimators=60, max_depth=8, n_jobs=-1, random_state=42),
+            "Gradient Boosting": GradientBoostingClassifier(n_estimators=50, max_depth=3, subsample=0.8, random_state=42),
+            "Logistic Regression": LogisticRegression(max_iter=300, solver="lbfgs", random_state=42),
             "Decision Tree": DecisionTreeClassifier(max_depth=6, random_state=42),
         }
     else:
         return {
-            "Random Forest Regressor": RandomForestRegressor(n_estimators=100, max_depth=8, random_state=42),
-            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=100, max_depth=4, random_state=42),
+            "Random Forest Regressor": RandomForestRegressor(n_estimators=60, max_depth=8, n_jobs=-1, random_state=42),
+            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=50, max_depth=3, subsample=0.8, random_state=42),
             "Ridge Regression": Ridge(alpha=1.0),
-            "Linear Regression": LinearRegression(),
+            "Linear Regression": LinearRegression(n_jobs=-1),
         }
 
 
@@ -164,13 +164,22 @@ def train_automl_pipeline(
     # 4. Extract raw feature definitions for UI predictor
     raw_features = []
     sample_record = {}
-    sample_row = df.dropna().head(1)
-    has_sample = not sample_row.empty
+    sample_row = df.head(1)
+    has_sample = len(sample_row) > 0
 
     for col in prep["num_cols"]:
         s = pd.to_numeric(df[col], errors="coerce").dropna()
         default_v = round(float(s.median()), 2) if not s.empty else 0.0
-        sample_v = round(float(sample_row[col].values[0]), 2) if has_sample and col in sample_row else default_v
+
+        sample_v = default_v
+        if has_sample and col in sample_row:
+            raw_val = sample_row[col].values[0]
+            try:
+                if not pd.isna(raw_val):
+                    sample_v = round(float(raw_val), 2)
+            except (ValueError, TypeError):
+                sample_v = default_v
+
         raw_features.append({
             "name": col,
             "type": "numeric",
@@ -183,13 +192,19 @@ def train_automl_pipeline(
 
     for col in prep["cat_cols"]:
         s = df[col].dropna().astype(str)
-        unique_vals = [str(v) for v in s.unique()[:15]]
+        unique_vals = [str(v).strip() for v in s.unique()[:15] if str(v).strip()]
         default_v = unique_vals[0] if unique_vals else "Missing"
-        sample_v = str(sample_row[col].values[0]) if has_sample and col in sample_row else default_v
+
+        sample_v = default_v
+        if has_sample and col in sample_row:
+            raw_val = sample_row[col].values[0]
+            if not pd.isna(raw_val) and str(raw_val).strip():
+                sample_v = str(raw_val).strip()
+
         raw_features.append({
             "name": col,
             "type": "categorical",
-            "options": unique_vals,
+            "options": unique_vals if unique_vals else [default_v],
             "default_value": default_v,
             "sample_value": sample_v,
         })

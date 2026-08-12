@@ -38,7 +38,7 @@ const MODEL_DESCRIPTIONS = {
   "Random Forest Classifier": {
     family: "Ensemble Bagging",
     description:
-      "Builds an ensemble of 100 independent decision trees using random feature subsets. Predictions are determined by majority voting across all trees.",
+      "Builds an ensemble of decision trees using random feature subsets. Predictions are determined by majority voting across all trees.",
     strengths: "Resistant to overfitting, handles complex non-linear interactions, and excels with mixed data types.",
   },
   "Gradient Boosting": {
@@ -62,7 +62,7 @@ const MODEL_DESCRIPTIONS = {
   "Random Forest Regressor": {
     family: "Ensemble Bagging",
     description:
-      "Constructs 100 parallel regression trees and averages their continuous predictions to forecast quantitative outcomes.",
+      "Constructs parallel regression trees and averages their continuous predictions to forecast quantitative outcomes.",
     strengths: "Low variance, resistant to noisy outliers, and captures non-linear price/revenue trends.",
   },
   "Gradient Boosting Regressor": {
@@ -84,6 +84,47 @@ const MODEL_DESCRIPTIONS = {
     strengths: "Zero hyperparameter tuning required, establishes standard baseline performance.",
   },
 };
+
+function getFeatureDefinitions(result) {
+  if (!result) return [];
+  if (result.raw_features && result.raw_features.length > 0) {
+    return result.raw_features;
+  }
+
+  // Fallback if raw_features not sent: parse feature_names
+  const rawList = [];
+  const catGroups = {};
+  const names = result.feature_names || [];
+
+  names.forEach((fn) => {
+    if (fn.includes("_")) {
+      const parts = fn.split("_");
+      const prefix = parts[0];
+      const val = parts.slice(1).join("_");
+      if (!catGroups[prefix]) catGroups[prefix] = [];
+      if (!catGroups[prefix].includes(val)) catGroups[prefix].push(val);
+    } else {
+      rawList.push({
+        name: fn,
+        type: "numeric",
+        default_value: 0,
+        sample_value: 10,
+      });
+    }
+  });
+
+  Object.entries(catGroups).forEach(([catName, opts]) => {
+    rawList.push({
+      name: catName,
+      type: "categorical",
+      options: opts,
+      default_value: opts[0] || "Missing",
+      sample_value: opts[0] || "Missing",
+    });
+  });
+
+  return rawList;
+}
 
 function MlStudio() {
   const { datasetId: routeDatasetId } = useParams();
@@ -107,9 +148,10 @@ function MlStudio() {
   const [predictInputs, setPredictInputs] = useState({});
   const [predicting, setPredicting] = useState(false);
   const [predictionResult, setPredictionResult] = useState(null);
+  const [fillFeedback, setFillFeedback] = useState(false);
 
-  // Info Modal / Tooltip State
-  const [activeInfoModal, setActiveInfoModal] = useState(null); // { title: string, data: object }
+  // Info Modal State
+  const [activeInfoModal, setActiveInfoModal] = useState(null);
 
   // 1. Load user datasets
   useEffect(() => {
@@ -164,6 +206,23 @@ function MlStudio() {
     loadTargets();
   }, [selectedDatasetId]);
 
+  // 4. Automatically populate inputs whenever mlResult changes
+  useEffect(() => {
+    if (!mlResult) return;
+    const feats = getFeatureDefinitions(mlResult);
+    const populated = {};
+    feats.forEach((f) => {
+      if (mlResult.sample_record && mlResult.sample_record[f.name] !== undefined && mlResult.sample_record[f.name] !== null) {
+        populated[f.name] = mlResult.sample_record[f.name];
+      } else if (f.sample_value !== undefined && f.sample_value !== null) {
+        populated[f.name] = f.sample_value;
+      } else {
+        populated[f.name] = f.default_value ?? (f.type === "numeric" ? 0 : "");
+      }
+    });
+    setPredictInputs(populated);
+  }, [mlResult]);
+
   const handleDatasetChange = (newId) => {
     if (!newId) return;
     setSelectedDatasetId(String(newId));
@@ -194,23 +253,6 @@ function MlStudio() {
         target_column: selectedTarget,
       });
       setMlResult(res);
-
-      // Pre-populate predictor inputs with realistic sample values from dataset
-      if (res.sample_record && Object.keys(res.sample_record).length > 0) {
-        setPredictInputs(res.sample_record);
-      } else if (res.raw_features && res.raw_features.length > 0) {
-        const initial = {};
-        res.raw_features.forEach((rf) => {
-          initial[rf.name] = rf.default_value ?? rf.sample_value ?? "";
-        });
-        setPredictInputs(initial);
-      } else {
-        const initial = {};
-        (res.feature_names || []).forEach((f) => {
-          initial[f] = "";
-        });
-        setPredictInputs(initial);
-      }
     } catch (err) {
       console.error("AutoML training failed:", err);
       setError(err.response?.data?.detail || "AutoML model training failed.");
@@ -239,20 +281,32 @@ function MlStudio() {
   };
 
   const handleLoadExample = () => {
-    if (mlResult?.sample_record) {
-      setPredictInputs({ ...mlResult.sample_record });
-    }
+    if (!mlResult) return;
+    const feats = getFeatureDefinitions(mlResult);
+    const populated = {};
+    feats.forEach((f) => {
+      if (mlResult.sample_record && mlResult.sample_record[f.name] !== undefined && mlResult.sample_record[f.name] !== null) {
+        populated[f.name] = mlResult.sample_record[f.name];
+      } else if (f.sample_value !== undefined && f.sample_value !== null) {
+        populated[f.name] = f.sample_value;
+      } else {
+        populated[f.name] = f.default_value ?? (f.type === "numeric" ? 0 : "");
+      }
+    });
+    setPredictInputs(populated);
+    setFillFeedback(true);
+    setTimeout(() => setFillFeedback(false), 2000);
   };
 
   const handleResetInputs = () => {
-    if (mlResult?.raw_features) {
-      const resetMap = {};
-      mlResult.raw_features.forEach((rf) => {
-        resetMap[rf.name] = rf.default_value ?? "";
-      });
-      setPredictInputs(resetMap);
-      setPredictionResult(null);
-    }
+    if (!mlResult) return;
+    const feats = getFeatureDefinitions(mlResult);
+    const resetMap = {};
+    feats.forEach((rf) => {
+      resetMap[rf.name] = "";
+    });
+    setPredictInputs(resetMap);
+    setPredictionResult(null);
   };
 
   const openInfoModal = (modelName) => {
@@ -263,6 +317,8 @@ function MlStudio() {
     };
     setActiveInfoModal({ title: modelName, data: details });
   };
+
+  const currentFeatures = getFeatureDefinitions(mlResult);
 
   return (
     <main className="dashboard ml-studio-page">
@@ -638,8 +694,8 @@ function MlStudio() {
                   className="sample-fill-btn"
                   onClick={handleLoadExample}
                 >
-                  <Sparkles size={14} />
-                  <span>Fill Example Record</span>
+                  {fillFeedback ? <Check size={14} color="#16a34a" /> : <Sparkles size={14} />}
+                  <span>{fillFeedback ? "Record Populated!" : "Fill Example Record"}</span>
                 </button>
                 <button
                   type="button"
@@ -647,35 +703,30 @@ function MlStudio() {
                   onClick={handleResetInputs}
                 >
                   <RotateCcw size={13} />
-                  <span>Reset</span>
+                  <span>Clear All</span>
                 </button>
               </div>
             </div>
 
             {/* Smart Feature Inputs Grid */}
             <div className="prediction-form-grid">
-              {(mlResult.raw_features && mlResult.raw_features.length > 0
-                ? mlResult.raw_features
-                : (mlResult.feature_names || []).map((f) => ({
-                    name: f,
-                    type: "numeric",
-                    default_value: "",
-                  }))
-              ).map((feat) => {
+              {currentFeatures.map((feat) => {
                 const isCat = feat.type === "categorical" && feat.options?.length > 0;
-                const currentVal = predictInputs[feat.name] ?? feat.default_value ?? "";
+                const currentVal = predictInputs[feat.name] !== undefined && predictInputs[feat.name] !== null
+                  ? predictInputs[feat.name]
+                  : "";
 
                 return (
                   <div className="predict-input-group" key={feat.name}>
                     <div className="predict-label-row">
-                      <label className="eyebrow">{feat.name}</label>
+                      <label className="eyebrow" title={feat.name}>{feat.name}</label>
                       <span className="feat-type-tag">{isCat ? "category" : "numeric"}</span>
                     </div>
 
                     {isCat ? (
                       <select
                         className="predict-select-box"
-                        value={currentVal}
+                        value={String(currentVal)}
                         onChange={(e) =>
                           setPredictInputs((prev) => ({
                             ...prev,
@@ -684,17 +735,16 @@ function MlStudio() {
                         }
                       >
                         {feat.options.map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
+                          <option key={opt} value={String(opt)}>
+                            {String(opt)}
                           </option>
                         ))}
                       </select>
                     ) : (
                       <input
-                        type="number"
-                        step="any"
+                        type="text"
                         placeholder={`e.g. ${feat.sample_value ?? feat.default_value ?? 0}`}
-                        value={currentVal}
+                        value={String(currentVal)}
                         onChange={(e) =>
                           setPredictInputs((prev) => ({
                             ...prev,

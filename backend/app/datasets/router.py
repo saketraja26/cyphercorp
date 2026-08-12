@@ -101,12 +101,14 @@ async def upload_dataset(
 
     file_path = user_directory / safe_filename
 
-    # 5. Prevent duplicate filename
-    if file_path.exists():
-        raise HTTPException(
-            status_code=409,
-            detail="A file with this name already exists.",
-        )
+    # 5. Auto-version filename if it already exists for this user
+    base_stem = Path(safe_filename).stem
+    suffix = Path(safe_filename).suffix
+    counter = 1
+    while file_path.exists():
+        safe_filename = f"{base_stem}_{counter}{suffix}"
+        file_path = user_directory / safe_filename
+        counter += 1
 
     # 6. Save uploaded file while checking size
     total_size = 0

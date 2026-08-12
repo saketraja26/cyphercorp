@@ -79,6 +79,10 @@ def preprocess_and_split(
     if len(data) < 5:
         raise ValueError("Dataset has too few records (< 5) after removing missing target values.")
 
+    # Speed optimization: Subsample large datasets (> 8,000 rows) for rapid benchmarking
+    if len(data) > 8000:
+        data = data.sample(n=8000, random_state=random_state)
+
     problem_type = detect_problem_type(data[target_column])
 
     # 2. Separate Target y

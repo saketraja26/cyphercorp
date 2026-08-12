@@ -76,12 +76,15 @@ class TestMlEngine(unittest.TestCase):
         self.assertGreater(len(result["leaderboard"]), 2)
         self.assertIn("best_model_name", result)
         self.assertGreater(len(result["feature_importance"]), 0)
+        self.assertIn("sample_record", result)
+        self.assertIn("raw_features", result)
+        self.assertGreater(len(result["sample_record"]), 0)
         self.assertTrue(os.path.exists(result["model_file"]))
 
         # Test live prediction on trained model
         pred = predict_sample(
             model_path=result["model_file"],
-            input_data={"age": 45, "monthly_charges": 85.0, "contract": "Month-to-Month"},
+            input_data=result["sample_record"],
         )
         self.assertIn("prediction", pred)
         self.assertIn(pred["prediction"], ["Yes", "No"])
