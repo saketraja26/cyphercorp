@@ -1,32 +1,32 @@
 import os
+import traceback
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlmodel import SQLModel
 
-from app.database.database import engine
+from app.database.database import Base, engine
+# Import all models to register them on Base.metadata
 from app.models.user import User
 from app.models.dataset import Dataset
-from app.models.experiment import Experiment
-from app.models.ml_model import MLModel
-from app.models.query_history import QueryHistory
 
 from app.auth.router import router as auth_router
 from app.datasets.router import router as datasets_router
 from app.sql.router import router as sql_router
 from app.ml.router import router as ml_router
-from fastapi.middleware.cors import CORSMiddleware
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Automatically initialize tables on new cloud database (e.g. Neon / Render Postgres)
+    # Automatically initialize tables on new database (PostgreSQL/SQLite)
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(SQLModel.metadata.create_all)
-        print("Database tables initialized successfully.")
+            await conn.run_sync(Base.metadata.create_all)
+        print("Database tables initialized successfully via Base.metadata.")
     except Exception as e:
-        print(f"Database initialization warning: {e}")
+        print(f"Database initialization error: {e}")
+        traceback.print_exc()
     yield
 
 
@@ -43,25 +43,39 @@ allowed_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
+    "https://cyphercorp.vercel.app",
 ]
 if cors_env:
-    allowed_origins.extend([o.strip() for o in cors_env.split(",") if o.strip()])
-
-# In production, allow all origins if not explicitly constrained
-origins_to_allow = ["*"] if not cors_env else allowed_origins
+    for o in cors_env.split(","):
+        clean_origin = o.strip()
+        if clean_origin and clean_origin not in allowed_origins:
+            allowed_origins.append(clean_origin)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins_to_allow,
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
+
+
 app.include_router(auth_router)
 app.include_router(datasets_router)
 app.include_router(sql_router)
 app.include_router(ml_router)
+
 
 @app.get("/")
 def root():
