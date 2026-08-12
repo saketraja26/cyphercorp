@@ -9,6 +9,7 @@ from app.auth.dependencies import get_current_user
 from app.database.database import get_db
 from app.models.dataset import Dataset
 from app.models.user import User
+from app.datasets.storage import ensure_dataset_file
 from app.ml.preprocessor import get_target_candidates
 from app.ml.trainer import train_automl_pipeline
 from app.ml.predictor import predict_sample
@@ -47,12 +48,7 @@ async def get_ml_target_candidates(
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         candidates = get_target_candidates(str(file_path))
@@ -88,12 +84,7 @@ async def train_dataset_models(
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         result = train_automl_pipeline(

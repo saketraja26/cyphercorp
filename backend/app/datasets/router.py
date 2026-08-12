@@ -22,6 +22,7 @@ from app.auth.dependencies import get_current_user
 from app.database.database import get_db
 from app.models.dataset import Dataset
 from app.models.user import User
+from app.datasets.storage import ensure_dataset_file, get_upload_dir
 from app.profiling.profiler import profile_csv
 from app.profiling.statistics import calculate_statistics
 from app.profiling.data_quality import analyze_data_quality
@@ -29,12 +30,6 @@ from app.profiling.visualizations import generate_visualization_data
 from app.profiling.insights import generate_insights
 from app.ai.service import build_analysis_context, build_analysis_prompt, ask_ai
 
-UPLOAD_DIR = Path("uploads")
-
-UPLOAD_DIR.mkdir(
-    parents=True,
-    exist_ok=True,
-)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 router = APIRouter(
@@ -97,7 +92,8 @@ async def upload_dataset(
     safe_filename = Path(file.filename).name
 
     # 4. Create user-specific directory
-    user_directory = UPLOAD_DIR / str(current_user.id)
+    upload_dir = get_upload_dir()
+    user_directory = upload_dir / str(current_user.id)
     user_directory.mkdir(
         parents=True,
         exist_ok=True,
@@ -219,7 +215,7 @@ async def upload_dataset(
 
         raise
 
-        # Run dataset profiler
+    # Run dataset profiler
     try:
         profile = profile_csv(str(file_path))
 
@@ -231,11 +227,18 @@ async def upload_dataset(
             status_code=400,
             detail=f"Unable to analyze CSV file: {str(exc)}",
         )
-    
+
+    # Read text content to persist in PostgreSQL table
+    try:
+        csv_text_content = file_path.read_text(encoding="utf-8-sig", errors="replace")
+    except Exception:
+        csv_text_content = None
+
     # 9. Create database record
     dataset = Dataset(
         name=Path(safe_filename).stem,
         file_path=str(file_path),
+        csv_data=csv_text_content,
         row_count=row_count,
         column_count=column_count,
         user_id=current_user.id,
@@ -248,8 +251,8 @@ async def upload_dataset(
     await db.refresh(dataset)
 
     return {
-    "dataset": dataset,
-    "profile": profile,
+        "dataset": dataset,
+        "profile": profile,
     }
 
 @router.get("/")
@@ -273,47 +276,28 @@ async def get_dataset_profile(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-
-
     result = await db.execute(
         select(Dataset).where(
             Dataset.id == dataset_id,
             Dataset.user_id == current_user.id,
         )
     )
-
-    
-
     dataset = result.scalar_one_or_none()
-
-    
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-    
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
-
-    
-
+    file_path = ensure_dataset_file(dataset)
     profile = profile_csv(str(file_path))
-
-    
 
     return {
         "dataset_id": dataset.id,
         "dataset_name": dataset.name,
         "profile": profile,
     }
+
 
 @router.get("/{dataset_id}/statistics")
 async def get_dataset_statistics(
@@ -327,26 +311,17 @@ async def get_dataset_statistics(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         statistics = calculate_statistics(str(file_path))
-
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -358,6 +333,7 @@ async def get_dataset_statistics(
         "dataset_name": dataset.name,
         "statistics": statistics,
     }
+
 
 @router.get("/{dataset_id}/quality")
 async def get_dataset_quality(
@@ -371,26 +347,17 @@ async def get_dataset_quality(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         quality = analyze_data_quality(str(file_path))
-
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -402,6 +369,7 @@ async def get_dataset_quality(
         "dataset_name": dataset.name,
         "quality": quality,
     }
+
 
 @router.get("/{dataset_id}/summary")
 async def get_dataset_summary(
@@ -415,28 +383,19 @@ async def get_dataset_summary(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         profile = profile_csv(str(file_path))
         statistics = calculate_statistics(str(file_path))
         quality = analyze_data_quality(str(file_path))
-
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -457,6 +416,7 @@ async def get_dataset_summary(
         "quality": quality,
     }
 
+
 @router.get("/{dataset_id}/visualizations")
 async def get_dataset_visualizations(
     dataset_id: int,
@@ -469,28 +429,17 @@ async def get_dataset_visualizations(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
-        visualization_data = generate_visualization_data(
-            str(file_path)
-        )
-
+        visualization_data = generate_visualization_data(str(file_path))
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -502,6 +451,7 @@ async def get_dataset_visualizations(
         "dataset_name": dataset.name,
         "visualizations": visualization_data,
     }
+
 
 @router.get("/{dataset_id}/insights")
 async def get_dataset_insights(
@@ -515,22 +465,14 @@ async def get_dataset_insights(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         statistics = calculate_statistics(str(file_path))
@@ -538,7 +480,6 @@ async def get_dataset_insights(
         visualizations = generate_visualization_data(str(file_path))
         correlations = visualizations.get("correlations", {})
         insights = generate_insights(statistics, quality, correlations)
-
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -564,22 +505,14 @@ async def get_dataset_ai_analysis(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         statistics = calculate_statistics(str(file_path))
@@ -596,7 +529,6 @@ async def get_dataset_ai_analysis(
             "dataset_name": dataset.name,
             "analysis": ai_analysis,
         }
-
     except Exception as exc:
         raise HTTPException(
             status_code=500,
@@ -616,22 +548,14 @@ async def get_dataset_analysis(
             Dataset.user_id == current_user.id,
         )
     )
-
     dataset = result.scalar_one_or_none()
-
     if dataset is None:
         raise HTTPException(
             status_code=404,
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         # Generate complete EDA payload

@@ -23,6 +23,11 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+            # Auto-migrate: ensure csv_data column exists on datasets table
+            try:
+                await conn.execute(text("ALTER TABLE datasets ADD COLUMN IF NOT EXISTS csv_data TEXT;"))
+            except Exception:
+                pass
         print("Database tables initialized successfully via Base.metadata.")
     except Exception as e:
         print(f"Database initialization error: {e}")

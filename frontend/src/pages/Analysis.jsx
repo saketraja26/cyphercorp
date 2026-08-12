@@ -287,51 +287,48 @@ function Analysis() {
           HEADER
       ========================= */}
       <section className="analysis-header">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "20px" }}>
-          <div>
-            <button
-              className="secondary-button"
-              onClick={() => navigate("/datasets")}
-              style={{ marginBottom: "16px" }}
-            >
-              <ArrowLeft size={16} />
-              Back to datasets
-            </button>
-
-            <p className="eyebrow">AUTOMATED EDA ENGINE</p>
-            <h1>
-              {analysis.dataset_name ||
-                analysis.dataset?.name ||
-                analysis.name ||
-                "Dataset"}
-              .
-            </h1>
-
-            <p className="intro">
-              Complete statistical profiling, automated quality audit, distributions,
-              correlations, and AI-powered data intelligence.
-            </p>
-          </div>
+        <div className="analysis-header-top">
+          <button
+            className="analysis-back-btn"
+            onClick={() => navigate("/datasets")}
+          >
+            <ArrowLeft size={15} />
+            <span>Back to datasets</span>
+          </button>
 
           {/* Dataset Selector Dropdown */}
           {datasets.length > 0 && (
-            <div className="dataset-selector-wrapper" style={{ marginTop: "10px" }}>
+            <div className="dataset-selector-wrapper">
               <label className="eyebrow">ACTIVE DATASET</label>
               <div className="dataset-select-box">
-                <Database size={16} />
+                <Database size={15} />
                 <select
                   value={selectedDatasetId ? String(selectedDatasetId) : ""}
                   onChange={(e) => handleDatasetChange(e.target.value)}
                 >
                   {datasets.map((d) => (
                     <option key={d.id} value={String(d.id)}>
-                      {d.name} ({d.row_count} rows)
+                      {d.name} ({Number(d.row_count || 0).toLocaleString()} rows)
                     </option>
                   ))}
                 </select>
               </div>
             </div>
           )}
+        </div>
+
+        <div className="analysis-header-main">
+          <p className="eyebrow">AUTOMATED EDA ENGINE</p>
+          <h1 className="analysis-title">
+            {analysis.dataset_name ||
+              analysis.dataset?.name ||
+              analysis.name ||
+              "Dataset"}
+          </h1>
+          <p className="intro">
+            Complete statistical profiling, automated quality audit, distributions,
+            correlations, and AI-powered data intelligence.
+          </p>
         </div>
       </section>
 
@@ -341,9 +338,9 @@ function Analysis() {
       <section className="analysis-summary">
         <div className="summary-card">
           <div className="summary-icon">
-            <Rows3 size={20} />
+            <Rows3 size={18} />
           </div>
-          <div>
+          <div className="summary-content">
             <p className="eyebrow">ROWS</p>
             <strong>{rowCount.toLocaleString()}</strong>
           </div>
@@ -351,9 +348,9 @@ function Analysis() {
 
         <div className="summary-card">
           <div className="summary-icon">
-            <Columns3 size={20} />
+            <Columns3 size={18} />
           </div>
-          <div>
+          <div className="summary-content">
             <p className="eyebrow">COLUMNS</p>
             <strong>{columnCount}</strong>
           </div>
@@ -361,24 +358,24 @@ function Analysis() {
 
         <div className="summary-card">
           <div className="summary-icon">
-            <CircleCheck size={20} />
+            <CircleCheck size={18} />
           </div>
-          <div>
+          <div className="summary-content">
             <p className="eyebrow">HEALTH SCORE</p>
-            <strong>
-              {healthScore}/100
+            <div className="summary-value-row">
+              <strong>{healthScore}/100</strong>
               <span className={`health-badge ${healthClass}`}>
                 {healthStatus}
               </span>
-            </strong>
+            </div>
           </div>
         </div>
 
         <div className="summary-card">
           <div className="summary-icon">
-            <AlertTriangle size={20} />
+            <AlertTriangle size={18} />
           </div>
-          <div>
+          <div className="summary-content">
             <p className="eyebrow">MISSING CELLS</p>
             <strong>{missingPercentage}%</strong>
           </div>

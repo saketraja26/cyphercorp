@@ -75,6 +75,37 @@ class TestApiEndpoints(unittest.TestCase):
             if os.path.exists(path):
                 os.remove(path)
 
+    def test_ensure_dataset_file_rehydrates_from_db(self):
+        from app.datasets.storage import ensure_dataset_file
+        csv_content = "id,name,val\n1,Alpha,100\n2,Beta,200\n"
+        dataset = Dataset(
+            id=999,
+            name="test_rehydrate",
+            user_id=1,
+            row_count=2,
+            column_count=3,
+            file_path="uploads/1/missing_test_file.csv",
+            csv_data=csv_content,
+        )
+        # Ensure file does not exist on disk
+        if os.path.exists(dataset.file_path):
+            os.remove(dataset.file_path)
+
+        restored_path = ensure_dataset_file(dataset)
+        self.assertTrue(restored_path.is_file())
+        self.assertEqual(restored_path.read_text(encoding="utf-8-sig"), csv_content)
+        # Cleanup
+        if restored_path.exists():
+            restored_path.unlink()
+
+
+    def test_password_hash_and_verify(self):
+        from app.auth.security import hash_password, verify_password
+        pwd = "SecurePassword123!"
+        hashed = hash_password(pwd)
+        self.assertTrue(verify_password(pwd, hashed))
+        self.assertFalse(verify_password("WrongPassword", hashed))
+
 
 if __name__ == "__main__":
     unittest.main()

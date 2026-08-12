@@ -31,7 +31,7 @@ function SqlAnalyst() {
   const [mode, setMode] = useState("nl"); // "nl" or "raw_sql"
   const [queryInput, setQueryInput] = useState("");
   const [sqlInput, setSqlInput] = useState("");
-  
+
   const [executing, setExecuting] = useState(false);
   const [queryResult, setQueryResult] = useState(null);
   const [error, setError] = useState("");

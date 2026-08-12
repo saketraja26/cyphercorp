@@ -8,6 +8,9 @@ backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ba
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("JWT_SECRET_KEY", "test_secret_key_12345678901234567890")
+
 from app.sql.sql_validator import validate_sql
 from app.sql.sql_engine import execute_sql_query, get_dataset_schema
 from app.sql.sql_generator import (
@@ -112,6 +115,25 @@ class TestSqlEngine(unittest.TestCase):
         explanation = explain_query_result(question, sql, res)
         self.assertIsInstance(explanation, str)
         self.assertGreater(len(explanation), 10)
+
+    def test_customer_id_counts_not_summed(self):
+        customer_schema = {
+            "columns": [
+                {"name": "CustomerID", "data_type": "INTEGER", "sample_values": [1, 2, 3]},
+                {"name": "Gender", "data_type": "TEXT", "sample_values": ["Male", "Female"]},
+            ],
+            "sample_rows": [{"CustomerID": 1, "Gender": "Female"}],
+        }
+        sql = generate_sql_from_nl("which gender has the highest number of customer id", customer_schema)
+        self.assertIn("COUNT", sql.upper())
+        self.assertNotIn("SUM", sql.upper())
+        self.assertNotIn("AVG", sql.upper())
+
+    def test_first_10_rows_limit_preserved(self):
+        schema = get_dataset_schema(self.csv_path)
+        sql = generate_sql_from_nl("see first 10 row", schema)
+        self.assertIn("LIMIT 10", sql.upper())
+        self.assertNotIn("LIMIT 25", sql.upper())
 
 
 if __name__ == "__main__":

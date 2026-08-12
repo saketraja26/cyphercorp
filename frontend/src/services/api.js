@@ -58,6 +58,22 @@ export const getCurrentUser = async () => {
   return response.data;
 };
 
+export const updateProfile = async ({ name }) => {
+  const response = await api.put("/auth/profile", { name });
+  if (response.data) {
+    localStorage.setItem("user_info", JSON.stringify(response.data));
+  }
+  return response.data;
+};
+
+export const changePassword = async ({ current_password, new_password }) => {
+  const response = await api.put("/auth/change-password", {
+    current_password,
+    new_password,
+  });
+  return response.data;
+};
+
 export const logoutUser = () => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("user_info");

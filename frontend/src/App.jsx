@@ -8,6 +8,7 @@ import Datasets from "./pages/Datasets";
 import Analysis from "./pages/Analysis";
 import SqlAnalyst from "./pages/SqlAnalyst";
 import MlStudio from "./pages/MlStudio";
+import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 
 import "./styles/global.css";
@@ -36,6 +37,7 @@ function ProtectedLayout() {
           <Route path="/sql/:datasetId" element={<SqlAnalyst />} />
           <Route path="/ml" element={<MlStudio />} />
           <Route path="/ml/:datasetId" element={<MlStudio />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>
     </div>

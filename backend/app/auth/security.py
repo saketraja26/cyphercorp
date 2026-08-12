@@ -5,13 +5,19 @@ from jose import JWTError, jwt
 from pydantic_settings import BaseSettings
 
 
+from pathlib import Path
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ENV_PATH = _BACKEND_DIR / ".env"
+
+
 class AuthSettings(BaseSettings):
-    jwt_secret_key: str
+    jwt_secret_key: str = "default_secret_key_change_in_production"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
 
     class Config:
-        env_file = ".env"
+        env_file = [str(_ENV_PATH), ".env", "backend/.env"]
         extra = "ignore"
 
 

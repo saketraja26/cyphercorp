@@ -8,6 +8,7 @@ from app.auth.dependencies import get_current_user
 from app.database.database import get_db
 from app.models.dataset import Dataset
 from app.models.user import User
+from app.datasets.storage import ensure_dataset_file
 from app.sql.sql_engine import execute_sql_query, get_dataset_schema
 from app.sql.sql_generator import (
     explain_query_result,
@@ -46,12 +47,7 @@ async def get_sql_schema(
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset file no longer exists.",
-        )
+    file_path = ensure_dataset_file(dataset)
 
     try:
         schema = get_dataset_schema(str(file_path))
@@ -89,13 +85,7 @@ async def execute_query_endpoint(
             detail="Dataset not found.",
         )
 
-    file_path = Path(dataset.file_path)
-    if not file_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dataset file no longer exists.",
-        )
-
+    file_path = ensure_dataset_file(dataset)
     schema = get_dataset_schema(str(file_path))
     suggested = generate_suggested_questions(schema)
 

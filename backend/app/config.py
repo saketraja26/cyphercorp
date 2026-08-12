@@ -1,8 +1,12 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_ENV_PATH = _BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
-    database_url: str
+    database_url: str = "sqlite+aiosqlite:///./cyphercorp.db"
 
     openai_api_key: str = ""
     openai_model: str = "gpt-5-mini"
@@ -11,7 +15,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash-lite"
 
     class Config:
-        env_file = ".env"
+        env_file = [str(_ENV_PATH), ".env", "backend/.env"]
         extra = "ignore"
 
 
