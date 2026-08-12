@@ -1,0 +1,91 @@
+# ==========================================
+# CYPHERCORP ROOT .GITIGNORE
+# ==========================================
+
+# Dependencies
+node_modules/
+*/node_modules/
+.pnp
+.pnp.js
+
+# Build Outputs & Production Artifacts
+dist/
+*/dist/
+dist-ssr/
+build/
+*/build/
+out/
+
+# Python & Virtual Environments
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+*/.venv/
+env/
+*/env/
+venv/
+*/venv/
+ENV/
+.pytest_cache/
+*/.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+
+# Runtime Data, Databases & Uploads
+*.sqlite3
+*.db
+uploads/
+*/uploads/
+models_store/
+*/models_store/
+artifacts/
+*/artifacts/
+*.csv
+*.xlsx
+*.parquet
+
+# Environment Variables & Secrets
+.env
+.env.*
+*.env
+*.env.local
+*.env.production
+!.env.example
+!*/.env.example
+
+# IDE & Editor Settings
+.vscode/
+*/.vscode/
+!.vscode/extensions.json
+.idea/
+*/.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs & Temp Files
+logs/
+*/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.tmp
+*.temp
