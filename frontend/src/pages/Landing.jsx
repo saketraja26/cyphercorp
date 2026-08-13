@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Code2,
   LayoutDashboard,
+  Menu,
+  X,
 } from "lucide-react";
 import SEOHead from "../components/SEOHead";
 
@@ -27,6 +29,7 @@ export default function Landing() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("eda");
   const [openFaq, setOpenFaq] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoggedIn] = useState(() => !!localStorage.getItem("access_token"));
 
   const toggleFaq = (index) => {
@@ -81,14 +84,14 @@ export default function Landing() {
             <span className="landing-badge">AI STUDIO</span>
           </Link>
 
-          <nav className="landing-nav-links" aria-label="Primary Navigation">
+          <nav className="landing-nav-links desktop-nav" aria-label="Primary Navigation">
             <a href="#features" className="landing-nav-link">Features</a>
             <a href="#showcase" className="landing-nav-link">Capabilities</a>
             <a href="#leaderboard" className="landing-nav-link">AutoML</a>
             <a href="#faq" className="landing-nav-link">FAQ</a>
           </nav>
 
-          <div className="landing-nav-actions">
+          <div className="landing-nav-actions desktop-actions">
             {isLoggedIn ? (
               <Link to="/dashboard" className="landing-btn-primary">
                 <LayoutDashboard size={15} />
@@ -107,7 +110,98 @@ export default function Landing() {
               </>
             )}
           </div>
+
+          {/* Mobile Right Controls: Quick CTA + Hamburger Toggle */}
+          <div className="landing-mobile-nav-right">
+            {isLoggedIn ? (
+              <Link to="/dashboard" className="landing-btn-primary landing-btn-mobile-quick">
+                <span>Launch</span>
+                <ArrowRight size={13} />
+              </Link>
+            ) : (
+              <Link to="/register" className="landing-btn-primary landing-btn-mobile-quick">
+                <span>Start Free</span>
+                <ArrowRight size={13} />
+              </Link>
+            )}
+            <button
+              className="landing-mobile-menu-btn"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Dropdown Drawer */}
+        {mobileMenuOpen && (
+          <div className="landing-mobile-dropdown">
+            <nav className="landing-mobile-nav-links" aria-label="Mobile Navigation">
+              <a
+                href="#features"
+                className="landing-mobile-nav-link"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Features
+              </a>
+              <a
+                href="#showcase"
+                className="landing-mobile-nav-link"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Capabilities
+              </a>
+              <a
+                href="#leaderboard"
+                className="landing-mobile-nav-link"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                AutoML Benchmarks
+              </a>
+              <a
+                href="#faq"
+                className="landing-mobile-nav-link"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                FAQ
+              </a>
+            </nav>
+
+            <div className="landing-mobile-menu-actions">
+              {isLoggedIn ? (
+                <Link
+                  to="/dashboard"
+                  className="landing-btn-primary mobile-full-btn"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <LayoutDashboard size={16} />
+                  <span>Launch Workspace</span>
+                  <ArrowRight size={14} />
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="landing-btn-secondary mobile-full-btn"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="landing-btn-primary mobile-full-btn"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span>Get Started Free</span>
+                    <ArrowRight size={14} />
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </header>
 
       {/* 2. HERO SECTION */}
@@ -317,41 +411,46 @@ export default function Landing() {
                     <div className="landing-preview-body">
                       <div className="landing-health-score-banner">
                         <div className="health-score-badge">94 / 100</div>
-                        <div>
+                        <div className="health-score-text">
                           <strong>Dataset Health: Excellent</strong>
                           <p className="text-muted text-sm">2,450 rows · 12 features · 0 missing target values</p>
                         </div>
                       </div>
 
-                      <div className="landing-preview-mini-table">
-                        <div className="mini-table-row header">
-                          <span>Feature</span>
-                          <span>Type</span>
-                          <span>Missing</span>
-                          <span>IQR Anomalies</span>
-                          <span>Mean / Mode</span>
+                      <div className="landing-preview-table-container">
+                        <div className="landing-preview-mini-table">
+                          <div className="mini-table-row header eda-header">
+                            <span>Feature</span>
+                            <span>Type</span>
+                            <span>Missing</span>
+                            <span>IQR Anomalies</span>
+                            <span>Mean / Mode</span>
+                          </div>
+                          <div className="mini-table-row">
+                            <span className="mono feature-name">annual_revenue</span>
+                            <span className="badge-type">float64</span>
+                            <span className="text-success">0.0%</span>
+                            <span className="text-warning">14 outliers</span>
+                            <span className="mono">$142,500</span>
+                          </div>
+                          <div className="mini-table-row">
+                            <span className="mono feature-name">churn_risk</span>
+                            <span className="badge-type">object</span>
+                            <span className="text-success">0.0%</span>
+                            <span className="text-muted">None</span>
+                            <span className="mono">Low (68%)</span>
+                          </div>
+                          <div className="mini-table-row">
+                            <span className="mono feature-name">customer_age</span>
+                            <span className="badge-type">int64</span>
+                            <span className="text-success">0.4%</span>
+                            <span className="text-muted">2 outliers</span>
+                            <span className="mono">36.4 yrs</span>
+                          </div>
                         </div>
-                        <div className="mini-table-row">
-                          <span className="mono">annual_revenue</span>
-                          <span className="badge-type">float64</span>
-                          <span className="text-success">0.0%</span>
-                          <span className="text-warning">14 outliers</span>
-                          <span className="mono">$142,500</span>
-                        </div>
-                        <div className="mini-table-row">
-                          <span className="mono">churn_risk</span>
-                          <span className="badge-type">object</span>
-                          <span className="text-success">0.0%</span>
-                          <span className="text-muted">None</span>
-                          <span className="mono">Low (68%)</span>
-                        </div>
-                        <div className="mini-table-row">
-                          <span className="mono">customer_age</span>
-                          <span className="badge-type">int64</span>
-                          <span className="text-success">0.4%</span>
-                          <span className="text-muted">2 outliers</span>
-                          <span className="mono">36.4 yrs</span>
-                        </div>
+                      </div>
+                      <div className="landing-table-scroll-hint mobile-only">
+                        <span>⇄ Swipe table to inspect all columns</span>
                       </div>
                     </div>
                   </div>
@@ -411,7 +510,7 @@ LIMIT 5;`}
                       </div>
 
                       <div className="landing-sql-explainer">
-                        <Zap size={14} color="#d8ff3e" />
+                        <Zap size={14} color="#d8ff3e" className="flex-shrink-0" />
                         <span><strong>Logic Explainer:</strong> Filters enterprise tier with revenue threshold and orders by LTV descending with 5 record limit.</span>
                       </div>
                     </div>
@@ -452,42 +551,47 @@ LIMIT 5;`}
                       <span className="landing-preview-title">AutoML Benchmark Leaderboard</span>
                     </div>
                     <div className="landing-preview-body">
-                      <div className="landing-preview-mini-table">
-                        <div className="mini-table-row header">
-                          <span>Rank / Model</span>
-                          <span>R² Score</span>
-                          <span>MSE</span>
-                          <span>Training Time</span>
-                          <span>Action</span>
+                      <div className="landing-preview-table-container">
+                        <div className="landing-preview-mini-table">
+                          <div className="mini-table-row header ml-header">
+                            <span>Rank / Model</span>
+                            <span>R² Score</span>
+                            <span>MSE</span>
+                            <span>Training Time</span>
+                            <span>Action</span>
+                          </div>
+                          <div className="mini-table-row winner">
+                            <span className="model-name">🏆 Random Forest</span>
+                            <span className="score-val text-success">0.942</span>
+                            <span className="mono">0.038</span>
+                            <span className="mono">1.24s</span>
+                            <span className="badge-best">Champion</span>
+                          </div>
+                          <div className="mini-table-row">
+                            <span className="model-name">⚡ Gradient Boosting</span>
+                            <span className="score-val text-success">0.928</span>
+                            <span className="mono">0.045</span>
+                            <span className="mono">1.82s</span>
+                            <span className="badge-runner">Rank 2</span>
+                          </div>
+                          <div className="mini-table-row">
+                            <span className="model-name">🌲 Decision Tree</span>
+                            <span className="score-val">0.865</span>
+                            <span className="mono">0.079</span>
+                            <span className="mono">0.42s</span>
+                            <span className="badge-runner">Rank 3</span>
+                          </div>
+                          <div className="mini-table-row">
+                            <span className="model-name">📈 Ridge Regression</span>
+                            <span className="score-val">0.812</span>
+                            <span className="mono">0.114</span>
+                            <span className="mono">0.18s</span>
+                            <span className="badge-runner">Rank 4</span>
+                          </div>
                         </div>
-                        <div className="mini-table-row winner">
-                          <span className="model-name">🏆 Random Forest</span>
-                          <span className="score-val text-success">0.942</span>
-                          <span className="mono">0.038</span>
-                          <span className="mono">1.24s</span>
-                          <span className="badge-best">Champion</span>
-                        </div>
-                        <div className="mini-table-row">
-                          <span className="model-name">⚡ Gradient Boosting</span>
-                          <span className="score-val text-success">0.928</span>
-                          <span className="mono">0.045</span>
-                          <span className="mono">1.82s</span>
-                          <span className="badge-runner">Rank 2</span>
-                        </div>
-                        <div className="mini-table-row">
-                          <span className="model-name">🌲 Decision Tree</span>
-                          <span className="score-val">0.865</span>
-                          <span className="mono">0.079</span>
-                          <span className="mono">0.42s</span>
-                          <span className="badge-runner">Rank 3</span>
-                        </div>
-                        <div className="mini-table-row">
-                          <span className="model-name">📈 Ridge Regression</span>
-                          <span className="score-val">0.812</span>
-                          <span className="mono">0.114</span>
-                          <span className="mono">0.18s</span>
-                          <span className="badge-runner">Rank 4</span>
-                        </div>
+                      </div>
+                      <div className="landing-table-scroll-hint mobile-only">
+                        <span>⇄ Swipe table to inspect all columns</span>
                       </div>
                     </div>
                   </div>
