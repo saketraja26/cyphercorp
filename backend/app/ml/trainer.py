@@ -22,6 +22,7 @@ from sklearn.metrics import (
     r2_score,
     recall_score,
 )
+from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from app.ml.preprocessor import preprocess_and_split
@@ -34,15 +35,15 @@ def _get_candidate_models(problem_type: str) -> dict[str, Any]:
     """Return dictionary of candidate models tailored to the problem type with high-speed execution."""
     if problem_type == "classification":
         return {
-            "Random Forest Classifier": RandomForestClassifier(n_estimators=25, max_depth=6, n_jobs=1, random_state=42),
-            "Gradient Boosting": GradientBoostingClassifier(n_estimators=25, max_depth=3, subsample=0.8, random_state=42),
-            "Logistic Regression": LogisticRegression(max_iter=150, solver="lbfgs", random_state=42),
+            "Random Forest Classifier": RandomForestClassifier(n_estimators=30, max_depth=6, n_jobs=1, random_state=42),
+            "Gradient Boosting": GradientBoostingClassifier(n_estimators=30, max_depth=3, subsample=0.8, random_state=42),
+            "Logistic Regression": LogisticRegression(max_iter=200, solver="lbfgs", random_state=42),
             "Decision Tree": DecisionTreeClassifier(max_depth=5, random_state=42),
         }
     else:
         return {
-            "Random Forest Regressor": RandomForestRegressor(n_estimators=25, max_depth=6, n_jobs=1, random_state=42),
-            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=25, max_depth=3, subsample=0.8, random_state=42),
+            "Random Forest Regressor": RandomForestRegressor(n_estimators=30, max_depth=6, n_jobs=1, random_state=42),
+            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=30, max_depth=3, subsample=0.8, random_state=42),
             "Ridge Regression": Ridge(alpha=1.0),
             "Linear Regression": LinearRegression(),
         }
@@ -75,18 +76,25 @@ def train_automl_pipeline(
     file_path: str,
     target_column: str,
     dataset_id: int,
+    excluded_features: list[str] | None = None,
+    included_features: list[str] | None = None,
 ) -> dict[str, Any]:
     """
-    Run full AutoML benchmark pipeline:
-    1. Preprocesses data
-    2. Trains candidate algorithms
-    3. Evaluates and ranks models
-    4. Serializes the best performing model
+    Run full zero-leakage AutoML benchmark pipeline:
+    1. Preprocesses data with isolated train/test splitting.
+    2. Runs k-fold cross validation for transparent algorithm comparison.
+    3. Evaluates and ranks models on isolated test holdout.
+    4. Serializes the champion model artifact with full preprocessing pipeline.
     """
     df = pd.read_csv(file_path)
 
-    # 1. Preprocess & Split
-    prep = preprocess_and_split(df, target_column=target_column)
+    # 1. Preprocess & Split (Strictly Zero Leakage)
+    prep = preprocess_and_split(
+        df,
+        target_column=target_column,
+        excluded_features=excluded_features,
+        included_features=included_features,
+    )
     problem_type = prep["problem_type"]
     feature_names = prep["feature_names"]
 
@@ -97,15 +105,39 @@ def train_automl_pipeline(
 
     candidates = _get_candidate_models(problem_type)
     leaderboard = []
-
     trained_models = {}
+
+    # Setup Cross-Validation Strategy on Training Set
+    if problem_type == "classification":
+        class_counts = pd.Series(y_train).value_counts()
+        n_splits = 3 if (class_counts >= 3).all() else max(2, int(class_counts.min()))
+        if n_splits >= 2 and len(np.unique(y_train)) > 1:
+            cv = StratifiedKFold(n_splits=min(3, n_splits), shuffle=True, random_state=42)
+        else:
+            cv = 2
+        scoring_metric = "f1_weighted"
+    else:
+        cv = KFold(n_splits=3, shuffle=True, random_state=42)
+        scoring_metric = "r2"
 
     for name, model in candidates.items():
         try:
+            # 2. Run Cross-Validation on Training Split
+            cv_mean = 0.0
+            cv_std = 0.0
+            try:
+                cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring_metric)
+                cv_mean = round(float(np.mean(cv_scores)), 4)
+                cv_std = round(float(np.std(cv_scores)), 4)
+            except Exception as cv_err:
+                print(f"[AutoML CV] Cross-validation notice for {name}: {cv_err}")
+
+            # 3. Fit Model on Full Training Partition
             start_t = time.perf_counter()
             model.fit(X_train, y_train)
             train_time = round((time.perf_counter() - start_t) * 1000, 2)
 
+            # 4. Evaluate on Held-out Isolated Test Set
             y_pred = model.predict(X_test)
             trained_models[name] = model
 
@@ -123,6 +155,8 @@ def train_automl_pipeline(
                         "precision": prec,
                         "recall": rec,
                         "f1_score": f1,
+                        "cv_score_mean": cv_mean,
+                        "cv_score_std": cv_std,
                         "confusion_matrix": cm,
                         "training_time_ms": train_time,
                         "score": f1,
@@ -141,6 +175,8 @@ def train_automl_pipeline(
                         "rmse": rmse,
                         "mae": mae,
                         "mse": mse,
+                        "cv_score_mean": cv_mean,
+                        "cv_score_std": cv_std,
                         "training_time_ms": train_time,
                         "score": r2,
                     }
@@ -152,16 +188,16 @@ def train_automl_pipeline(
     if not leaderboard:
         raise RuntimeError("All candidate models failed to train.")
 
-    # 2. Rank models
+    # 5. Rank models
     leaderboard.sort(key=lambda x: x["score"], reverse=True)
     best_model_info = leaderboard[0]
     best_model_name = best_model_info["model_name"]
     best_model = trained_models[best_model_name]
 
-    # 3. Extract Feature Importance
+    # 6. Extract Feature Importance
     feature_importance = _extract_feature_importance(best_model, feature_names)
 
-    # 4. Extract raw feature definitions for UI predictor
+    # 7. Extract raw feature definitions for UI predictor
     raw_features = []
     sample_record = {}
     sample_row = df.head(1)
@@ -169,7 +205,7 @@ def train_automl_pipeline(
 
     for col in prep["num_cols"]:
         s = pd.to_numeric(df[col], errors="coerce").dropna()
-        default_v = round(float(s.median()), 2) if not s.empty else 0.0
+        default_v = round(prep["numeric_medians"].get(col, 0.0), 2)
 
         sample_v = default_v
         if has_sample and col in sample_row:
@@ -191,9 +227,10 @@ def train_automl_pipeline(
         sample_record[col] = sample_v
 
     for col in prep["cat_cols"]:
-        s = df[col].dropna().astype(str)
-        unique_vals = [str(v).strip() for v in s.unique()[:15] if str(v).strip()]
-        default_v = unique_vals[0] if unique_vals else "Missing"
+        default_v = prep["cat_modes"].get(col, "Missing")
+        unique_vals = prep["cat_vocab"].get(col, [default_v])
+        if not unique_vals:
+            unique_vals = [default_v]
 
         sample_v = default_v
         if has_sample and col in sample_row:
@@ -204,13 +241,13 @@ def train_automl_pipeline(
         raw_features.append({
             "name": col,
             "type": "categorical",
-            "options": unique_vals if unique_vals else [default_v],
+            "options": unique_vals,
             "default_value": default_v,
             "sample_value": sample_v,
         })
         sample_record[col] = sample_v
 
-    # 5. Serialize winning pipeline
+    # 8. Serialize winning pipeline artifact
     model_filename = f"model_ds_{dataset_id}_{target_column}_{int(time.time())}.joblib"
     model_path = MODELS_DIR / model_filename
 
@@ -224,9 +261,15 @@ def train_automl_pipeline(
         "label_encoder": prep["label_encoder"],
         "target_classes": prep["target_classes"],
         "feature_names": feature_names,
+        "active_features": prep["active_features"],
         "num_cols": prep["num_cols"],
         "cat_cols": prep["cat_cols"],
+        "numeric_medians": prep["numeric_medians"],
+        "cat_modes": prep["cat_modes"],
+        "cat_vocab": prep["cat_vocab"],
         "raw_features": raw_features,
+        "stratified_split": prep["stratified_split"],
+        "excluded_features_info": prep["excluded_features_info"],
         "created_at": time.time(),
     }
     joblib.dump(artifact, model_path)
@@ -240,6 +283,7 @@ def train_automl_pipeline(
         "test_samples": prep["test_samples"],
         "num_features": prep["num_features"],
         "feature_names": feature_names,
+        "active_features": prep["active_features"],
         "raw_features": raw_features,
         "sample_record": sample_record,
         "target_classes": prep["target_classes"],
@@ -247,10 +291,17 @@ def train_automl_pipeline(
         "best_model_score": best_model_info["score"],
         "leaderboard": leaderboard,
         "feature_importance": feature_importance,
+        "excluded_features_info": prep["excluded_features_info"],
+        "validation_strategy": {
+            "cv_folds": 3,
+            "stratified": prep["stratified_split"],
+            "test_split_pct": 20,
+            "zero_leakage": True,
+        },
         "model_file": str(model_path),
     }
 
-    # Save benchmark cache so page refresh restores it immediately
+    # Save benchmark cache
     try:
         benchmark_path = MODELS_DIR / f"benchmark_ds_{dataset_id}.joblib"
         joblib.dump(result_summary, benchmark_path)

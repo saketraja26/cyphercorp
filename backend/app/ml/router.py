@@ -1,9 +1,11 @@
+import asyncio
 from pathlib import Path
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from app.auth.dependencies import get_current_user
 from app.database.database import get_db
@@ -11,8 +13,9 @@ from app.models.dataset import Dataset
 from app.models.user import User
 from app.datasets.storage import ensure_dataset_file
 from app.ml.preprocessor import get_target_candidates
-from app.ml.trainer import train_automl_pipeline
+from app.ml.trainer import train_automl_pipeline, MODELS_DIR
 from app.ml.predictor import predict_sample
+import joblib
 
 router = APIRouter(
     prefix="/datasets",
@@ -22,6 +25,8 @@ router = APIRouter(
 
 class TrainModelRequest(BaseModel):
     target_column: str
+    excluded_features: list[str] | None = None
+    included_features: list[str] | None = None
 
 
 class PredictRequest(BaseModel):
@@ -36,7 +41,9 @@ async def get_ml_target_candidates(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Dataset).where(
+        select(Dataset)
+        .options(defer(Dataset.csv_data))
+        .where(
             Dataset.id == dataset_id,
             Dataset.user_id == current_user.id,
         )
@@ -51,11 +58,15 @@ async def get_ml_target_candidates(
     file_path = ensure_dataset_file(dataset)
 
     try:
-        candidates = get_target_candidates(str(file_path))
+        analysis_payload = get_target_candidates(str(file_path))
         return {
             "dataset_id": dataset.id,
             "dataset_name": dataset.name,
-            "target_candidates": candidates,
+            "target_candidates": analysis_payload.get("target_candidates", []),
+            "recommended_target": analysis_payload.get("recommended_target", ""),
+            "identifier_columns": analysis_payload.get("identifier_columns", []),
+            "recommendation_banner": analysis_payload.get("recommendation_banner", ""),
+            "feature_intelligence": analysis_payload.get("feature_intelligence", []),
         }
     except Exception as exc:
         raise HTTPException(
@@ -70,10 +81,6 @@ async def get_dataset_benchmark(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy.orm import defer
-    import joblib
-    from app.ml.trainer import MODELS_DIR
-
     result = await db.execute(
         select(Dataset)
         .options(defer(Dataset.csv_data))
@@ -107,9 +114,6 @@ async def train_dataset_models(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    import asyncio
-    from sqlalchemy.orm import defer
-
     result = await db.execute(
         select(Dataset)
         .options(defer(Dataset.csv_data))
@@ -129,13 +133,15 @@ async def train_dataset_models(
 
     try:
         # Non-blocking async thread execution to keep server responsive
-        result = await asyncio.to_thread(
+        training_result = await asyncio.to_thread(
             train_automl_pipeline,
             file_path=str(file_path),
             target_column=payload.target_column,
             dataset_id=dataset.id,
+            excluded_features=payload.excluded_features,
+            included_features=payload.included_features,
         )
-        return result
+        return training_result
     except ValueError as val_err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

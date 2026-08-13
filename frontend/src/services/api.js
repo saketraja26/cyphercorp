@@ -160,12 +160,17 @@ export const getDatasetMlTargets = async (datasetId) => {
   return response.data;
 };
 
-export const trainAutoMl = async (datasetId, { target_column }) => {
+export const trainAutoMl = async (
+  datasetId,
+  { target_column, excluded_features, included_features }
+) => {
   if (!datasetId) {
     throw new Error("Dataset ID is missing");
   }
   const response = await api.post(`/datasets/${datasetId}/ml/train`, {
     target_column,
+    excluded_features,
+    included_features,
   });
   return response.data;
 };

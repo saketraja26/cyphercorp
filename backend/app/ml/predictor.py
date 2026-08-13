@@ -18,40 +18,59 @@ def predict_sample(model_path: str, input_data: dict[str, Any]) -> dict[str, Any
 
     model = artifact["model"]
     scaler = artifact["scaler"]
-    label_encoder = artifact["label_encoder"]
+    label_encoder = artifact.get("label_encoder")
     feature_names = artifact["feature_names"]
     problem_type = artifact["problem_type"]
-    num_cols = artifact["num_cols"]
-    cat_cols = artifact["cat_cols"]
-    target_classes = artifact["target_classes"]
+    num_cols = artifact.get("num_cols", [])
+    cat_cols = artifact.get("cat_cols", [])
+    numeric_medians = artifact.get("numeric_medians", {})
+    cat_modes = artifact.get("cat_modes", {})
+    cat_vocab = artifact.get("cat_vocab", {})
+    target_classes = artifact.get("target_classes", [])
 
-    # 1. Construct single-row DataFrame
-    row_dict = {}
+    # 1. Prepare raw inputs for active features
+    # Impute numeric
+    num_vals = {}
     for col in num_cols:
         val = input_data.get(col)
+        default_v = numeric_medians.get(col, 0.0)
         try:
-            row_dict[col] = float(val) if val is not None else 0.0
+            num_vals[col] = float(val) if val is not None and str(val).strip() != "" else default_v
         except (ValueError, TypeError):
-            row_dict[col] = 0.0
+            num_vals[col] = default_v
 
+    # Impute categorical
+    cat_vals = {}
     for col in cat_cols:
         val = input_data.get(col)
-        row_dict[col] = str(val) if val is not None else "Missing"
+        default_v = cat_modes.get(col, "Missing")
+        cat_vals[col] = str(val).strip() if val is not None and str(val).strip() != "" else default_v
 
-    # 2. Re-create feature vector aligned with feature_names
+    # 2. Re-create feature vector aligned with exact feature_names
     vector = np.zeros(len(feature_names))
 
     for idx, f_name in enumerate(feature_names):
         if f_name in num_cols:
-            vector[idx] = row_dict.get(f_name, 0.0)
+            vector[idx] = num_vals.get(f_name, 0.0)
         else:
-            # Check if this is a dummy column for categorical
+            # Check dummy column match
+            matched = False
             for cat_col in cat_cols:
                 prefix = f"{cat_col}_"
                 if f_name.startswith(prefix):
-                    category_val = f_name[len(prefix):]
-                    if str(row_dict.get(cat_col)) == category_val:
-                        vector[idx] = 1.0
+                    category_opt = f_name[len(prefix):]
+                    actual_cat = cat_vals.get(cat_col, "Missing")
+                    allowed_cats = cat_vocab.get(cat_col, [])
+                    if actual_cat in allowed_cats:
+                        if category_opt == actual_cat:
+                            vector[idx] = 1.0
+                            matched = True
+                    else:
+                        if category_opt == "Other":
+                            vector[idx] = 1.0
+                            matched = True
+                    if matched:
+                        break
 
     # 3. Scale features
     vector_scaled = scaler.transform(vector.reshape(1, -1))

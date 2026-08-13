@@ -19,6 +19,10 @@ import {
   Check,
   AlertTriangle,
   X,
+  ShieldCheck,
+  Filter,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 import {
@@ -33,8 +37,8 @@ const MODEL_DESCRIPTIONS = {
   "AutoML Pipeline": {
     family: "Automated Machine Learning",
     description:
-      "AutoML automates data cleaning, categorical one-hot encoding, feature standardization, algorithm benchmarking, and model serialization with zero manual coding.",
-    strengths: "Fast end-to-end prototyping, unbiased model selection, and instant real-time inference.",
+      "AutoML automates data cleaning, zero-leakage preprocessing, categorical encoding, feature scaling, 3-fold cross-validation benchmarking, and champion model serialization.",
+    strengths: "Fast end-to-end prototyping, unbiased model selection, leakage prevention, and instant real-time inference.",
   },
   "Random Forest Classifier": {
     family: "Ensemble Bagging",
@@ -92,7 +96,6 @@ function getFeatureDefinitions(result) {
     return result.raw_features;
   }
 
-  // Fallback if raw_features not sent: parse feature_names
   const rawList = [];
   const catGroups = {};
   const names = result.feature_names || [];
@@ -140,6 +143,11 @@ function MlStudio() {
   const [targets, setTargets] = useState([]);
   const [selectedTarget, setSelectedTarget] = useState("");
   const [targetInfo, setTargetInfo] = useState(null);
+  const [recommendedTarget, setRecommendedTarget] = useState("");
+  const [recommendationBanner, setRecommendationBanner] = useState("");
+  const [featureIntelligence, setFeatureIntelligence] = useState([]);
+  const [featureSelectionMap, setFeatureSelectionMap] = useState({});
+  const [showFeaturePanel, setShowFeaturePanel] = useState(false);
 
   const [training, setTraining] = useState(false);
   const [mlResult, setMlResult] = useState(null);
@@ -209,11 +217,24 @@ function MlStudio() {
         const res = await getDatasetMlTargets(selectedDatasetId);
         const candidates = res.target_candidates || [];
         setTargets(candidates);
+        setRecommendedTarget(res.recommended_target || "");
+        setRecommendationBanner(res.recommendation_banner || "");
 
-        if (candidates.length > 0 && !selectedTarget) {
-          setSelectedTarget(candidates[0].name);
-          setTargetInfo(candidates[0]);
-        }
+        const featList = res.feature_intelligence || [];
+        setFeatureIntelligence(featList);
+
+        // Initialize feature selection map
+        const initialSelection = {};
+        featList.forEach((f) => {
+          initialSelection[f.name] = !f.is_excluded_by_default;
+        });
+        setFeatureSelectionMap(initialSelection);
+
+        // Auto-select recommended target
+        const defaultTargetName = res.recommended_target || (candidates[0]?.name ?? "");
+        setSelectedTarget(defaultTargetName);
+        const found = candidates.find((c) => c.name === defaultTargetName) || candidates[0];
+        setTargetInfo(found || null);
 
         // Fetch backend benchmark cache if not already restored
         try {
@@ -222,8 +243,8 @@ function MlStudio() {
             setMlResult(benchmarkRes);
             if (benchmarkRes.target_column) {
               setSelectedTarget(benchmarkRes.target_column);
-              const found = candidates.find((c) => c.name === benchmarkRes.target_column);
-              if (found) setTargetInfo(found);
+              const bFound = candidates.find((c) => c.name === benchmarkRes.target_column);
+              if (bFound) setTargetInfo(bFound);
             }
             localStorage.setItem(
               `ml_benchmark_${selectedDatasetId}`,
@@ -248,7 +269,11 @@ function MlStudio() {
     const feats = getFeatureDefinitions(mlResult);
     const populated = {};
     feats.forEach((f) => {
-      if (mlResult.sample_record && mlResult.sample_record[f.name] !== undefined && mlResult.sample_record[f.name] !== null) {
+      if (
+        mlResult.sample_record &&
+        mlResult.sample_record[f.name] !== undefined &&
+        mlResult.sample_record[f.name] !== null
+      ) {
         populated[f.name] = mlResult.sample_record[f.name];
       } else if (f.sample_value !== undefined && f.sample_value !== null) {
         populated[f.name] = f.sample_value;
@@ -274,6 +299,27 @@ function MlStudio() {
     setTargetInfo(found || null);
   };
 
+  const handleApplyRecommended = () => {
+    if (recommendedTarget) {
+      handleTargetChange(recommendedTarget);
+    }
+  };
+
+  const handleToggleFeature = (featName) => {
+    setFeatureSelectionMap((prev) => ({
+      ...prev,
+      [featName]: !prev[featName],
+    }));
+  };
+
+  const handleResetFeatureExclusions = () => {
+    const defaultSelection = {};
+    featureIntelligence.forEach((f) => {
+      defaultSelection[f.name] = !f.is_excluded_by_default;
+    });
+    setFeatureSelectionMap(defaultSelection);
+  };
+
   const handleTrainAutoMl = async () => {
     if (!selectedDatasetId || !selectedTarget) return;
 
@@ -282,12 +328,26 @@ function MlStudio() {
       setError("");
       setPredictionResult(null);
 
+      // Determine excluded and included features from map
+      const excluded = [];
+      const included = [];
+
+      Object.entries(featureSelectionMap).forEach(([featName, isChecked]) => {
+        if (featName === selectedTarget) return;
+        if (isChecked) {
+          included.push(featName);
+        } else {
+          excluded.push(featName);
+        }
+      });
+
       const res = await trainAutoMl(selectedDatasetId, {
         target_column: selectedTarget,
+        excluded_features: excluded,
+        included_features: included,
       });
 
       setMlResult(res);
-      // Persist benchmark so refreshing never loses results
       try {
         localStorage.setItem(
           `ml_benchmark_${selectedDatasetId}`,
@@ -328,7 +388,11 @@ function MlStudio() {
     const feats = getFeatureDefinitions(mlResult);
     const populated = {};
     feats.forEach((f) => {
-      if (mlResult.sample_record && mlResult.sample_record[f.name] !== undefined && mlResult.sample_record[f.name] !== null) {
+      if (
+        mlResult.sample_record &&
+        mlResult.sample_record[f.name] !== undefined &&
+        mlResult.sample_record[f.name] !== null
+      ) {
         populated[f.name] = mlResult.sample_record[f.name];
       } else if (f.sample_value !== undefined && f.sample_value !== null) {
         populated[f.name] = f.sample_value;
@@ -356,12 +420,19 @@ function MlStudio() {
     const details = MODEL_DESCRIPTIONS[modelName] || {
       family: "Machine Learning Algorithm",
       description: `Mathematical model optimized for ${mlResult?.problem_type || "predictive"} tasks.`,
-      strengths: "Evaluated on held-out test data for optimal accuracy and low error.",
+      strengths: "Evaluated on isolated test data and 3-fold cross-validation for optimal generalization.",
     };
     setActiveInfoModal({ title: modelName, data: details });
   };
 
   const currentFeatures = getFeatureDefinitions(mlResult);
+
+  // Compute counts for feature intelligence panel
+  const totalCandidateFeatures = featureIntelligence.filter((f) => f.name !== selectedTarget).length;
+  const activeFeatureCount = Object.entries(featureSelectionMap).filter(
+    ([name, active]) => active && name !== selectedTarget
+  ).length;
+  const excludedFeatureCount = totalCandidateFeatures - activeFeatureCount;
 
   return (
     <main className="dashboard ml-studio-page">
@@ -429,7 +500,7 @@ function MlStudio() {
           </div>
           <h1>ML Studio & AutoML.</h1>
           <p className="intro">
-            Automated feature engineering, model benchmarking, validation metrics,
+            Automated feature intelligence, leakage prevention, stratified cross-validation,
             and real-time prediction deployment for classification and regression.
           </p>
         </div>
@@ -457,6 +528,34 @@ function MlStudio() {
         </div>
       </section>
 
+      {/* ========================================================
+          INTELLIGENCE & RECOMMENDATION BANNER
+          ======================================================== */}
+      {recommendationBanner && (
+        <section className="ml-intelligence-banner">
+          <div className="ml-intelligence-content">
+            <div className="ml-intelligence-icon">
+              <Sparkles size={20} />
+            </div>
+            <div className="ml-intelligence-text">
+              <h4>AutoML Target Intelligence</h4>
+              <p>{recommendationBanner}</p>
+            </div>
+          </div>
+
+          {recommendedTarget && selectedTarget !== recommendedTarget && (
+            <button
+              type="button"
+              className="ml-apply-rec-btn"
+              onClick={handleApplyRecommended}
+            >
+              <Check size={14} />
+              <span>Select {recommendedTarget}</span>
+            </button>
+          )}
+        </section>
+      )}
+
       {/* =========================
           TRAINING CONFIGURATION
       ========================= */}
@@ -477,30 +576,103 @@ function MlStudio() {
               value={selectedTarget}
               onChange={(e) => handleTargetChange(e.target.value)}
             >
-              {targets.map((t) => (
-                <option key={t.name} value={t.name}>
-                  {t.name} ({t.suggested_task.toUpperCase()})
-                </option>
-              ))}
+              {targets.map((t) => {
+                let statusLabel = "";
+                if (t.is_identifier) {
+                  statusLabel = " [IDENTIFIER - NOT RECOMMENDED]";
+                } else if (t.status === "warning") {
+                  statusLabel = " [WARNING]";
+                } else if (t.status === "recommended") {
+                  statusLabel = " [RECOMMENDED]";
+                }
+                return (
+                  <option key={t.name} value={t.name}>
+                    {t.name} ({t.suggested_task.toUpperCase()}){statusLabel}
+                  </option>
+                );
+              })}
             </select>
 
             {targetInfo && (
-              <div className="target-meta-box">
-                <div>
-                  <span className="eyebrow">TASK TYPE</span>
-                  <strong className={`task-badge ${targetInfo.suggested_task}`}>
-                    {targetInfo.suggested_task.toUpperCase()}
-                  </strong>
+              <>
+                <div className="target-meta-box">
+                  <div>
+                    <span className="eyebrow">TASK TYPE</span>
+                    <strong className={`task-badge ${targetInfo.suggested_task}`}>
+                      {targetInfo.suggested_task.toUpperCase()}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="eyebrow">UNIQUE VALUES</span>
+                    <strong>{targetInfo.unique_count?.toLocaleString()}</strong>
+                  </div>
+                  <div>
+                    <span className="eyebrow">DATA TYPE</span>
+                    <code>{targetInfo.data_type}</code>
+                  </div>
                 </div>
-                <div>
-                  <span className="eyebrow">UNIQUE CLASSES/VALUES</span>
-                  <strong>{targetInfo.unique_count}</strong>
+
+                {/* Target Quality Breakdown Card */}
+                <div className="target-quality-card">
+                  <div className="target-quality-header">
+                    <span className="eyebrow">TARGET QUALITY ASSESSMENT</span>
+                    <span className={`quality-verdict-badge ${targetInfo.status || "recommended"}`}>
+                      {targetInfo.quality_verdict || "Evaluated"}
+                    </span>
+                  </div>
+
+                  {targetInfo.quality_reasons && targetInfo.quality_reasons.length > 0 && (
+                    <ul className="target-quality-reasons">
+                      {targetInfo.quality_reasons.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* Class Distribution Breakdown */}
+                  {targetInfo.class_distribution && targetInfo.class_distribution.length > 0 && (
+                    <div className="target-distribution-preview">
+                      <span className="eyebrow">CLASS DISTRIBUTION</span>
+                      {targetInfo.class_distribution.map((cd) => (
+                        <div className="dist-bar-item" key={cd.class_name}>
+                          <span className="dist-bar-label" title={cd.class_name}>
+                            {cd.class_name}
+                          </span>
+                          <div className="dist-bar-track">
+                            <div
+                              className="dist-bar-fill"
+                              style={{ width: `${Math.max(4, cd.percentage)}%` }}
+                            />
+                          </div>
+                          <span className="dist-bar-pct">{cd.percentage}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Numeric Variance Breakdown */}
+                  {targetInfo.variance_info && (
+                    <div className="variance-stats-grid">
+                      <div className="variance-stat-box">
+                        <span>Mean</span>
+                        <strong>{targetInfo.variance_info.mean}</strong>
+                      </div>
+                      <div className="variance-stat-box">
+                        <span>Std Dev</span>
+                        <strong>{targetInfo.variance_info.std}</strong>
+                      </div>
+                      <div className="variance-stat-box">
+                        <span>Min</span>
+                        <strong>{targetInfo.variance_info.min}</strong>
+                      </div>
+                      <div className="variance-stat-box">
+                        <span>Max</span>
+                        <strong>{targetInfo.variance_info.max}</strong>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <span className="eyebrow">DATA TYPE</span>
-                  <code>{targetInfo.data_type}</code>
-                </div>
-              </div>
+              </>
             )}
           </div>
 
@@ -508,8 +680,8 @@ function MlStudio() {
             <div>
               <h3>Train & Benchmark Models</h3>
               <p>
-                AutoML automatically cleans data, balances splits, trains 4 candidate
-                algorithms, and picks the highest scoring champion model.
+                AutoML enforces zero data leakage, runs 3-fold stratified cross-validation on
+                the training set, benchmarks 4 candidate models, and isolates held-out test data.
               </p>
             </div>
 
@@ -524,6 +696,121 @@ function MlStudio() {
           </div>
         </div>
       </section>
+
+      {/* ========================================================
+          FEATURE INTELLIGENCE & EXCLUSIONS ACCORDION
+          ======================================================== */}
+      {featureIntelligence.length > 0 && (
+        <section className="feature-intelligence-card">
+          <div
+            className="feature-panel-header"
+            onClick={() => setShowFeaturePanel((prev) => !prev)}
+          >
+            <div>
+              <div className="ml-eyebrow-row">
+                <span className="eyebrow">FEATURE INTELLIGENCE & LEAKAGE PREVENTION</span>
+                <span className="info-icon-btn">
+                  <ShieldCheck size={13} />
+                  <span>Protected</span>
+                </span>
+              </div>
+              <h3>Automated Feature Selection & Exclusions</h3>
+              <div className="feature-summary-badges">
+                <span className="feat-count-pill active">
+                  <Check size={12} /> {activeFeatureCount} Features Active
+                </span>
+                {excludedFeatureCount > 0 && (
+                  <span className="feat-count-pill excluded">
+                    <Filter size={12} /> {excludedFeatureCount} Auto-Excluded
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <button type="button" className="info-icon-btn dark">
+              {showFeaturePanel ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              <span>{showFeaturePanel ? "Hide Details" : "Review & Customize"}</span>
+            </button>
+          </div>
+
+          {showFeaturePanel && (
+            <div className="feature-table-container">
+              <table className="feature-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: "40px" }}>Use</th>
+                    <th>Column Name</th>
+                    <th>Data Type</th>
+                    <th>Status</th>
+                    <th>Exclusion / Leakage Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {featureIntelligence
+                    .filter((f) => f.name !== selectedTarget)
+                    .map((feat) => {
+                      const isChecked = !!featureSelectionMap[feat.name];
+                      let statusBadge = (
+                        <span className="feat-status-pill included">Included Feature</span>
+                      );
+
+                      if (feat.is_identifier) {
+                        statusBadge = (
+                          <span className="feat-status-pill identifier">
+                            Candidate Identifier
+                          </span>
+                        );
+                      } else if (feat.leakage_risk !== "none") {
+                        statusBadge = (
+                          <span className="feat-status-pill leakage">
+                            Target Leakage Risk
+                          </span>
+                        );
+                      } else if (feat.is_constant) {
+                        statusBadge = (
+                          <span className="feat-status-pill constant">Constant Column</span>
+                        );
+                      }
+
+                      return (
+                        <tr key={feat.name}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleFeature(feat.name)}
+                            />
+                          </td>
+                          <td>
+                            <strong>{feat.name}</strong>
+                          </td>
+                          <td>
+                            <code>{feat.data_type}</code>
+                          </td>
+                          <td>{statusBadge}</td>
+                          <td style={{ color: "var(--muted)", fontSize: "12px" }}>
+                            {feat.exclusion_reason || "Ready for modeling."}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+
+              <div className="feature-table-toolbar">
+                <button
+                  type="button"
+                  className="reset-fill-btn"
+                  onClick={handleResetFeatureExclusions}
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset to Recommended Defaults</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* =========================
           ERROR CARD
@@ -559,13 +846,25 @@ function MlStudio() {
               </div>
               <h2>{mlResult.best_model_name}</h2>
               <p>
-                Selected as the top performing model for predicting <strong>{mlResult.target_column}</strong> with a score of{" "}
+                Selected as the top performing model for predicting{" "}
+                <strong>{mlResult.target_column}</strong> with a test score of{" "}
                 <span className="score-highlight">
                   {mlResult.problem_type === "classification"
                     ? `F1: ${(mlResult.best_model_score * 100).toFixed(1)}%`
                     : `R²: ${mlResult.best_model_score.toFixed(3)}`}
                 </span>
               </p>
+
+              {mlResult.excluded_features_info && mlResult.excluded_features_info.length > 0 && (
+                <div className="excluded-features-summary-row">
+                  <span>Excluded Columns:</span>
+                  {mlResult.excluded_features_info.map((ex) => (
+                    <span className="excluded-chip" key={ex.name} title={ex.reason}>
+                      {ex.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -579,22 +878,32 @@ function MlStudio() {
               <Activity size={22} />
             </div>
 
+            {/* Validation Strategy Badge */}
+            <div className="validation-methodology-banner">
+              <ShieldCheck size={16} />
+              <span>
+                <strong>Zero Data Leakage Validation:</strong> Models evaluated on an isolated
+                20% test holdout with 3-Fold Stratified Cross-Validation.
+              </span>
+            </div>
+
             <div className="table-scroll-wrapper">
               <table className="sql-table ml-leaderboard-table">
                 <thead>
                   <tr>
                     <th>Rank</th>
                     <th>Model Name</th>
+                    <th>CV Score (3-Fold)</th>
                     {mlResult.problem_type === "classification" ? (
                       <>
-                        <th>F1 Score</th>
+                        <th>Test F1</th>
                         <th>Accuracy</th>
                         <th>Precision</th>
                         <th>Recall</th>
                       </>
                     ) : (
                       <>
-                        <th>R² Score</th>
+                        <th>Test R²</th>
                         <th>RMSE</th>
                         <th>MAE</th>
                         <th>MSE</th>
@@ -616,6 +925,13 @@ function MlStudio() {
                       </td>
                       <td>
                         <strong>{item.model_name}</strong>
+                      </td>
+                      <td className="mono">
+                        {item.cv_score_mean !== undefined
+                          ? mlResult.problem_type === "classification"
+                            ? `${(item.cv_score_mean * 100).toFixed(1)}% ± ${(item.cv_score_std * 100).toFixed(1)}%`
+                            : `${item.cv_score_mean.toFixed(3)} ± ${item.cv_score_std.toFixed(2)}`
+                          : "Evaluated"}
                       </td>
                       {mlResult.problem_type === "classification" ? (
                         <>
@@ -694,7 +1010,7 @@ function MlStudio() {
           )}
 
           {/* ========================================================
-              LIVE PREDICTOR SANDBOX (IMPROVED & USER-FRIENDLY)
+              LIVE PREDICTOR SANDBOX
               ======================================================== */}
           <div className="ml-card predictor-card">
             <div className="section-heading">
@@ -708,8 +1024,8 @@ function MlStudio() {
                       setActiveInfoModal({
                         title: "Real-Time Prediction Engine",
                         data: {
-                          family: "Inference & What-If Simulation",
-                          description: `This sandbox passes your custom record parameters into the trained ${mlResult.best_model_name} pipeline. It automatically scales numbers, one-hot encodes categorical values, and computes the forecasted outcome in milliseconds.`,
+                          family: "Inference & Simulation",
+                          description: `This sandbox passes your custom record parameters into the trained ${mlResult.best_model_name} pipeline. It automatically applies zero-leakage transforms and computes the predicted outcome in milliseconds.`,
                           strengths: "Test live business hypotheses, evaluate individual client profiles, and understand confidence scores.",
                         },
                       })
@@ -728,7 +1044,8 @@ function MlStudio() {
               <div className="instructions-text">
                 <p>
                   Enter feature values below to test what outcome the champion model (
-                  <strong>{mlResult.best_model_name}</strong>) predicts for <strong>{mlResult.target_column}</strong>.
+                  <strong>{mlResult.best_model_name}</strong>) predicts for{" "}
+                  <strong>{mlResult.target_column}</strong>.
                 </p>
               </div>
               <div className="predictor-toolbar">
@@ -755,9 +1072,10 @@ function MlStudio() {
             <div className="prediction-form-grid">
               {currentFeatures.map((feat) => {
                 const isCat = feat.type === "categorical" && feat.options?.length > 0;
-                const currentVal = predictInputs[feat.name] !== undefined && predictInputs[feat.name] !== null
-                  ? predictInputs[feat.name]
-                  : "";
+                const currentVal =
+                  predictInputs[feat.name] !== undefined && predictInputs[feat.name] !== null
+                    ? predictInputs[feat.name]
+                    : "";
 
                 return (
                   <div className="predict-input-group" key={feat.name}>
@@ -810,9 +1128,7 @@ function MlStudio() {
               {predicting ? "Computing Prediction..." : `Generate Prediction for ${mlResult.target_column}`}
             </button>
 
-            {/* ========================================================
-                PREDICTION RESULT (CLEAR, DETAILED & GROUNDED)
-                ======================================================== */}
+            {/* Prediction Result */}
             {predictionResult && (
               <div className="prediction-output-box">
                 <div className="pred-summary-card">
@@ -838,7 +1154,6 @@ function MlStudio() {
                       )}
                   </div>
 
-                  {/* Human-Readable Explanation */}
                   {predictionResult.explanation && (
                     <div className="pred-explanation-banner">
                       <p>{predictionResult.explanation}</p>
