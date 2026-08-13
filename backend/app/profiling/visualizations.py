@@ -278,55 +278,124 @@ def _generate_datetime_distribution(dates: pd.Series) -> list[dict[str, Any]]:
     ]
 
 
+def classify_correlation(corr_val: float) -> tuple[str, str, str]:
+    """
+    Classify correlation value according to the standard 5-tier scale:
+    0.80–1.00: Very Strong
+    0.60–0.79: Strong
+    0.40–0.59: Moderate
+    0.20–0.39: Weak
+    0.00–0.19: Very Weak
+    """
+    abs_v = round(abs(corr_val), 4)
+    direction = "Positive" if corr_val >= 0 else "Negative"
+
+    if abs_v >= 0.80:
+        tier = "Very Strong"
+    elif abs_v >= 0.60:
+        tier = "Strong"
+    elif abs_v >= 0.40:
+        tier = "Moderate"
+    elif abs_v >= 0.20:
+        tier = "Weak"
+    else:
+        tier = "Very Weak"
+
+    full_label = f"{tier} {direction}"
+    return full_label, direction, tier
+
+
 def _generate_correlation_data(df: pd.DataFrame) -> dict[str, Any]:
-    """Calculate Pearson correlation matrix and top correlated pairs."""
+    """
+    Calculate dataset-adaptive Pearson correlation matrix and top correlated pairs.
+    - Excludes constant columns (zero variance)
+    - Excludes candidate sequential/identifier columns
+    - Handles missing values gracefully via pairwise complete observations
+    - Ranks by absolute correlation strength
+    - Applies 5-tier classification scale
+    """
+    total_rows = len(df)
     numeric_df = df.select_dtypes(include=[np.number])
-    valid_cols = [col for col in numeric_df.columns if numeric_df[col].dropna().nunique() > 1]
+
+    # Filter out columns with <= 1 unique value or potential unique integer IDs
+    valid_cols = []
+    for col in numeric_df.columns:
+        series = numeric_df[col].dropna()
+        n_unique = int(series.nunique())
+        if n_unique <= 1:
+            continue
+
+        # Exclude sequential index IDs like 'id', 'row_id', 'index' if 100% unique
+        col_lower = str(col).lower()
+        if (col_lower in ("id", "row_id", "index", "record_id", "unnamed: 0") or col_lower.endswith("_id")) and n_unique == total_rows:
+            continue
+
+        valid_cols.append(col)
 
     if len(valid_cols) < 2:
-        return {"columns": [], "matrix": [], "top_correlations": []}
+        return {
+            "columns": valid_cols,
+            "matrix": [],
+            "top_correlations": [],
+            "numeric_column_count": len(valid_cols),
+            "message": "At least two suitable numeric columns are required to calculate correlations." if len(valid_cols) < 2 else "Ready",
+        }
 
-    corr_matrix = df[valid_cols].corr(method="pearson").round(3)
-
+    # Pairwise correlation calculation for maximum resilience against missing values
     matrix_data = []
-    for row_col in valid_cols:
-        row_vals = {}
-        for col_name in valid_cols:
-            val = corr_matrix.loc[row_col, col_name]
-            row_vals[col_name] = 0.0 if (pd.isna(val) or np.isinf(val)) else float(val)
-        matrix_data.append({"column": row_col, "values": row_vals})
-
-    # Extract top pairs
     pairs = []
-    for i in range(len(valid_cols)):
-        for j in range(i + 1, len(valid_cols)):
-            col1 = valid_cols[i]
-            col2 = valid_cols[j]
-            corr_val = corr_matrix.loc[col1, col2]
-            if pd.notna(corr_val) and not np.isinf(corr_val):
-                corr_float = float(corr_val)
-                abs_corr = abs(corr_float)
-                strength = (
-                    "Strong Positive" if corr_float >= 0.6
-                    else "Moderate Positive" if corr_float >= 0.2
-                    else "Weak Positive" if corr_float > 0
-                    else "Strong Negative" if corr_float <= -0.6
-                    else "Moderate Negative" if corr_float <= -0.2
-                    else "Weak Negative"
-                )
-                pairs.append(
-                    {
-                        "column1": col1,
-                        "column2": col2,
-                        "feature_a": col1,
-                        "feature_b": col2,
-                        "correlation": corr_float,
-                        "abs_correlation": abs_corr,
-                        "strength": strength,
-                    }
-                )
 
+    for i in range(len(valid_cols)):
+        col1 = valid_cols[i]
+        row_vals = {}
+
+        for j in range(len(valid_cols)):
+            col2 = valid_cols[j]
+            if col1 == col2:
+                row_vals[col2] = 1.0
+            else:
+                # Pairwise complete rows
+                aligned = df[[col1, col2]].dropna()
+                if len(aligned) >= 3:
+                    try:
+                        c_val = aligned[col1].corr(aligned[col2], method="pearson")
+                        if pd.notna(c_val) and not np.isinf(c_val):
+                            row_vals[col2] = round(float(c_val), 3)
+                        else:
+                            row_vals[col2] = 0.0
+                    except Exception:
+                        row_vals[col2] = 0.0
+                else:
+                    row_vals[col2] = 0.0
+
+            # Collect unique non-self pairs (i < j)
+            if i < j:
+                c_float = row_vals[col2]
+                if pd.notna(c_float) and not np.isinf(c_float):
+                    strength_label, direction, tier = classify_correlation(c_float)
+                    pairs.append(
+                        {
+                            "column1": col1,
+                            "column2": col2,
+                            "feature_a": col1,
+                            "feature_b": col2,
+                            "correlation": float(c_float),
+                            "abs_correlation": abs(float(c_float)),
+                            "strength": strength_label,
+                            "direction": direction,
+                            "tier": tier,
+                        }
+                    )
+
+        matrix_data.append({"column": col1, "values": row_vals})
+
+    # Rank correlations by absolute strength descending
     pairs.sort(key=lambda x: x["abs_correlation"], reverse=True)
+
+    # Filter out near-zero correlations if there are enough stronger relationships
+    meaningful_pairs = [p for p in pairs if p["abs_correlation"] >= 0.05]
+    display_pairs = meaningful_pairs if len(meaningful_pairs) >= 3 else pairs
+
     top_pairs = [
         {
             "column1": p["column1"],
@@ -335,14 +404,18 @@ def _generate_correlation_data(df: pd.DataFrame) -> dict[str, Any]:
             "feature_b": p["feature_b"],
             "correlation": p["correlation"],
             "strength": p["strength"],
+            "direction": p["direction"],
+            "tier": p["tier"],
         }
-        for p in pairs[:12]
+        for p in display_pairs[:12]
     ]
 
     return {
         "columns": valid_cols,
         "matrix": matrix_data,
         "top_correlations": top_pairs,
+        "numeric_column_count": len(valid_cols),
+        "total_pairs_evaluated": len(pairs),
     }
 
 

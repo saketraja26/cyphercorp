@@ -104,54 +104,97 @@ def generate_insights(
                 }
             )
 
-    # 5. Correlation Insights
+    # 5. Dynamic Dataset-Adaptive Correlation Insights
     top_corrs = []
     if correlations and isinstance(correlations, dict):
         top_corrs = correlations.get("top_correlations", [])
+
     for corr in top_corrs:
         c_val = corr.get("correlation", 0.0)
         c1 = corr.get("column1", "")
         c2 = corr.get("column2", "")
-        if abs(c_val) >= 0.7:
-            direction = "positive" if c_val > 0 else "negative"
+        strength = corr.get("strength") or ("Strong" if abs(c_val) >= 0.6 else "Moderate")
+        direction = "positive" if c_val >= 0 else "negative"
+
+        if abs(c_val) >= 0.40:
             insights.append(
                 {
                     "type": "correlation",
                     "severity": "info",
-                    "title": f"Strong Correlation ({c1} & {c2})",
-                    "message": f"Strong {direction} correlation ({c_val:+.2f}) detected between '{c1}' and '{c2}'.",
+                    "title": f"{strength} Correlation: {c1} vs {c2}",
+                    "message": f"'{c1}' and '{c2}' exhibit a {strength.lower()} correlation of {c_val:+.2f}. As {c1} {'increases' if c_val > 0 else 'decreases'}, {c2} tends to {'increase' if c_val > 0 else 'decrease'}.",
                     "columns": [c1, c2],
                 }
             )
 
-    # 6. Distribution & Skewness Insights
+    # 6. Dominant Category & Class Balance Insights
     for col_info in statistics.get("columns", []):
-        stats = col_info.get("statistics")
-        if stats and stats.get("skewness") is not None:
-            skew = stats["skewness"]
-            col_name = col_info.get("name", "")
-            if skew > 1.5:
+        cat_stats = col_info.get("categorical_statistics")
+        col_name = col_info.get("name", "")
+        if cat_stats:
+            top_val = cat_stats.get("top_value")
+            top_pct = cat_stats.get("top_percentage", 0.0)
+            u_cnt = cat_stats.get("unique_count", col_info.get("unique_count", 0))
+
+            if top_pct >= 60.0 and top_val not in ("None", "Missing", "null"):
                 insights.append(
                     {
-                        "type": "distribution",
-                        "severity": "low",
-                        "title": f"Right-Skewed Distribution ('{col_name}')",
-                        "message": f"Column '{col_name}' is strongly right-skewed (skewness: {skew:+.2f}). Log transformation may be beneficial for linear models.",
-                        "column": col_name,
-                    }
-                )
-            elif skew < -1.5:
-                insights.append(
-                    {
-                        "type": "distribution",
-                        "severity": "low",
-                        "title": f"Left-Skewed Distribution ('{col_name}')",
-                        "message": f"Column '{col_name}' is strongly left-skewed (skewness: {skew:+.2f}).",
+                        "type": "categorical_dominance",
+                        "severity": "info",
+                        "title": f"Dominant Category in '{col_name}'",
+                        "message": f"In '{col_name}', '{top_val}' is the dominant category representing {top_pct:.1f}% of all records ({cat_stats.get('top_frequency', 0):,} rows across {u_cnt} unique values).",
                         "column": col_name,
                     }
                 )
 
-    # 7. Structural Flags: Empty, Constant, ID Candidates
+    # 7. Distribution, Spread & Skewness Insights
+    for col_info in statistics.get("columns", []):
+        stats = col_info.get("statistics")
+        col_name = col_info.get("name", "")
+        if stats:
+            skew = stats.get("skewness")
+            mean_val = stats.get("mean")
+            std_val = stats.get("std")
+            min_val = stats.get("min")
+            max_val = stats.get("max")
+
+            if skew is not None:
+                if skew > 1.5:
+                    insights.append(
+                        {
+                            "type": "distribution",
+                            "severity": "low",
+                            "title": f"Right-Skewed Distribution ('{col_name}')",
+                            "message": f"Column '{col_name}' is right-skewed (skewness: {skew:+.2f}, mean: {mean_val}, median: {stats.get('median')}).",
+                            "column": col_name,
+                        }
+                    )
+                elif skew < -1.5:
+                    insights.append(
+                        {
+                            "type": "distribution",
+                            "severity": "low",
+                            "title": f"Left-Skewed Distribution ('{col_name}')",
+                            "message": f"Column '{col_name}' is left-skewed (skewness: {skew:+.2f}, mean: {mean_val}, median: {stats.get('median')}).",
+                            "column": col_name,
+                        }
+                    )
+
+            # High relative spread / variance
+            if mean_val and std_val and abs(mean_val) > 0:
+                cv = std_val / abs(mean_val)
+                if cv > 1.5 and min_val is not None and max_val is not None:
+                    insights.append(
+                        {
+                            "type": "high_variance",
+                            "severity": "low",
+                            "title": f"High Measurement Variance ('{col_name}')",
+                            "message": f"Column '{col_name}' shows wide numerical spread (std: {std_val:.2f}, range: [{min_val:.2f}, {max_val:.2f}]).",
+                            "column": col_name,
+                        }
+                    )
+
+    # 8. Structural Flags: Empty, Constant, ID Candidates
     empty_cols = quality.get("empty_columns", [])
     if empty_cols:
         insights.append(

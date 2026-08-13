@@ -1346,6 +1346,368 @@ code {
   color: #c62828;
 }
 
+/* Correlation View Switcher */
+.corr-view-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-alt);
+  padding: 3px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.corr-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.corr-view-btn:hover {
+  color: var(--text);
+}
+
+.corr-view-btn.active {
+  background: #ffffff;
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* =========================================================
+   INTERACTIVE CORRELATION MATRIX HEATMAP
+   ========================================================= */
+
+.correlation-heatmap-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 20px;
+}
+
+/* Inspector Banner */
+.heatmap-inspector-card {
+  min-height: 48px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+}
+
+.inspector-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inspector-content.placeholder {
+  color: var(--muted);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inspector-pair-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "DM Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.inspector-pair-badge .col-name {
+  background: #ffffff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.inspector-pair-badge .vs-tag {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.inspector-metrics {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.inspector-value-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.inspector-value-pill .value-number {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.inspector-value-pill .strength-tag {
+  font-family: "DM Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.inspector-value-pill .strength-tag.positive {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.inspector-value-pill .strength-tag.negative {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.inspector-explanation {
+  font-size: 12px;
+  color: #475569;
+}
+
+/* Heatmap Table Grid */
+.heatmap-scroll-wrapper {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.heatmap-matrix-table {
+  border-collapse: separate;
+  border-spacing: 4px;
+  width: 100%;
+  min-width: 440px;
+}
+
+.heatmap-corner-cell {
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  text-align: left;
+  padding: 8px 10px;
+  background: transparent;
+}
+
+.heatmap-col-header {
+  font-family: "DM Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  padding: 8px 6px;
+  text-align: center;
+  background: var(--surface-alt);
+  border-radius: 4px;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.heatmap-col-header.highlight {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.heatmap-row-header {
+  font-family: "DM Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  padding: 8px 10px;
+  text-align: left;
+  background: var(--surface-alt);
+  border-radius: 4px;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.heatmap-row-header.highlight {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.heatmap-cell {
+  padding: 10px 8px;
+  text-align: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  user-select: none;
+  min-width: 58px;
+}
+
+.heatmap-cell:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  z-index: 5;
+  position: relative;
+}
+
+.heatmap-cell.active-cell {
+  outline: 2.5px solid #0f172a;
+  box-shadow: 0 0 0 2px #ffffff, 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 6;
+  position: relative;
+}
+
+.heatmap-cell.diagonal {
+  cursor: default;
+}
+
+.heatmap-cell .cell-val {
+  font-size: 12px;
+  letter-spacing: -0.01em;
+}
+
+/* Legend Row */
+.heatmap-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.legend-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.legend-label.neg {
+  color: #b91c1c;
+}
+
+.legend-label.pos {
+  color: #15803d;
+}
+
+.legend-gradient-bar {
+  flex: 1;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.gradient-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #dc2626 0%, #fee2e2 35%, #f1f5f9 50%, #dcfce7 65%, #16a34a 100%);
+  border: 1px solid var(--border);
+}
+
+.gradient-center-marker {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: "DM Mono", monospace;
+}
+
+.analysis-empty-card {
+  padding: 32px 24px;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.analysis-empty-card .empty-card-icon {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.analysis-empty-card h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.analysis-empty-card p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 460px;
+  line-height: 1.5;
+}
+
+.viz-filter-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.viz-tab-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.viz-tab-btn:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.viz-tab-btn.active {
+  background: var(--text);
+  color: #ffffff;
+  border-color: var(--text);
+}
+
 /* AI Insights Banner */
 .insights-grid {
   display: grid;

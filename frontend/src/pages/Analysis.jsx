@@ -12,11 +12,13 @@ import {
   AlertTriangle,
   GitCommit,
   TrendingUp,
+  TrendingDown,
   Database,
   Upload,
 } from "lucide-react";
 
 import { getDatasetAnalysis, getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
+import CorrelationHeatmap from "../components/CorrelationHeatmap";
 
 function formatStatValue(val, colName = "", metricType = "") {
   if (val === null || val === undefined) return "—";
@@ -151,6 +153,8 @@ function Analysis() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [vizFilterTab, setVizFilterTab] = useState("all");
+  const [corrViewMode, setCorrViewMode] = useState("both"); // "both", "heatmap", "cards"
 
   // 1. Fetch available datasets
   useEffect(() => {
@@ -767,122 +771,238 @@ function Analysis() {
             <BarChart3 size={22} />
           </div>
 
-          <div className="visualization-grid">
-            {(visualizations.visualizations || []).map((visualization, index) => {
-              const maxCount = Math.max(
-                ...(visualization.data?.map((d) => d.count) || [1]),
-                1
-              );
+          {/* Visualization Type Filter Tabs */}
+          {(() => {
+            const vizList = visualizations.visualizations || [];
+            const histCount = vizList.filter((v) => v.type === "histogram").length;
+            const freqCount = vizList.filter((v) => v.type === "frequency").length;
+            const timeCount = vizList.filter((v) => v.type === "time").length;
+            const typeCount = (histCount > 0 ? 1 : 0) + (freqCount > 0 ? 1 : 0) + (timeCount > 0 ? 1 : 0);
 
-              return (
-                <div
-                  className="visualization-card"
-                  key={`${visualization.column}-${index}`}
-                >
-                  <p className="eyebrow">
-                    {visualization.type === "histogram"
-                      ? "DISTRIBUTION"
-                      : visualization.type === "time"
-                      ? "TIMELINE"
-                      : "CATEGORIES"}
-                  </p>
+            const filteredList = vizList.filter((v) => {
+              if (vizFilterTab === "histogram") return v.type === "histogram";
+              if (vizFilterTab === "frequency") return v.type === "frequency";
+              if (vizFilterTab === "time") return v.type === "time";
+              return true;
+            });
 
-                  <h3>{visualization.column}</h3>
-
-                  <div className="viz-bars">
-                    {visualization.data?.slice(0, 10).map((d, i) => (
-                      <div className="viz-bar-row" key={i}>
-                        <span className="viz-bar-label" title={d.label || d.value || d.bucket || "—"}>
-                          {d.label || d.value || d.bucket || "—"}
-                        </span>
-                        <div className="viz-bar-track">
-                          <div
-                            className="viz-bar-fill"
-                            style={{
-                              width: `${Math.max(3, (d.count / maxCount) * 100)}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="viz-bar-count mono">{Number(d.count).toLocaleString()}</span>
-                      </div>
-                    ))}
+            return (
+              <>
+                {typeCount > 1 && (
+                  <div className="viz-filter-tabs">
+                    <button
+                      type="button"
+                      className={`viz-tab-btn ${vizFilterTab === "all" ? "active" : ""}`}
+                      onClick={() => setVizFilterTab("all")}
+                    >
+                      All ({vizList.length})
+                    </button>
+                    {histCount > 0 && (
+                      <button
+                        type="button"
+                        className={`viz-tab-btn ${vizFilterTab === "histogram" ? "active" : ""}`}
+                        onClick={() => setVizFilterTab("histogram")}
+                      >
+                        Numeric Distributions ({histCount})
+                      </button>
+                    )}
+                    {freqCount > 0 && (
+                      <button
+                        type="button"
+                        className={`viz-tab-btn ${vizFilterTab === "frequency" ? "active" : ""}`}
+                        onClick={() => setVizFilterTab("frequency")}
+                      >
+                        Categories ({freqCount})
+                      </button>
+                    )}
+                    {timeCount > 0 && (
+                      <button
+                        type="button"
+                        className={`viz-tab-btn ${vizFilterTab === "time" ? "active" : ""}`}
+                        onClick={() => setVizFilterTab("time")}
+                      >
+                        Timeline ({timeCount})
+                      </button>
+                    )}
                   </div>
+                )}
+
+                <div className="visualization-grid">
+                  {filteredList.map((visualization, index) => {
+                    const maxCount = Math.max(
+                      ...(visualization.data?.map((d) => d.count) || [1]),
+                      1
+                    );
+
+                    return (
+                      <div
+                        className="visualization-card"
+                        key={`${visualization.column}-${index}`}
+                      >
+                        <p className="eyebrow">
+                          {visualization.type === "histogram"
+                            ? "DISTRIBUTION"
+                            : visualization.type === "time"
+                            ? "TIMELINE"
+                            : "CATEGORIES"}
+                        </p>
+
+                        <h3>{visualization.column}</h3>
+
+                        <div className="viz-bars">
+                          {visualization.data?.slice(0, 10).map((d, i) => (
+                            <div className="viz-bar-row" key={i}>
+                              <span className="viz-bar-label" title={d.label || d.value || d.bucket || "—"}>
+                                {d.label || d.value || d.bucket || "—"}
+                              </span>
+                              <div className="viz-bar-track">
+                                <div
+                                  className="viz-bar-fill"
+                                  style={{
+                                    width: `${Math.max(3, (d.count / maxCount) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="viz-bar-count mono">{Number(d.count).toLocaleString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              </>
+            );
+          })()}
         </section>
       )}
 
       {/* =========================
-          CORRELATION MATRIX
+          KEY FEATURE CORRELATIONS & HEATMAP
       ========================= */}
-      {topCorrelations.length > 0 && (
-        <section className="analysis-section">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">RELATIONSHIPS</p>
-              <h2>Key feature correlations</h2>
+      <section className="analysis-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">RELATIONSHIPS & HEATMAP</p>
+            <h2>Key feature correlations</h2>
+          </div>
+
+          {topCorrelations.length > 0 && (
+            <div className="corr-view-switcher">
+              <button
+                type="button"
+                className={`corr-view-btn ${corrViewMode === "both" ? "active" : ""}`}
+                onClick={() => setCorrViewMode("both")}
+              >
+                Overview (Both)
+              </button>
+              <button
+                type="button"
+                className={`corr-view-btn ${corrViewMode === "heatmap" ? "active" : ""}`}
+                onClick={() => setCorrViewMode("heatmap")}
+              >
+                Heatmap Matrix
+              </button>
+              <button
+                type="button"
+                className={`corr-view-btn ${corrViewMode === "cards" ? "active" : ""}`}
+                onClick={() => setCorrViewMode("cards")}
+              >
+                Relationship Cards ({topCorrelations.length})
+              </button>
             </div>
-            <GitCommit size={22} />
-          </div>
+          )}
+        </div>
 
-          <div className="correlations-grid">
-            {topCorrelations.map((corr, idx) => {
-              const col1 = corr.feature_a || corr.column1 || corr.col1 || "Feature A";
-              const col2 = corr.feature_b || corr.column2 || corr.col2 || "Feature B";
-              const val = typeof corr.correlation === "number" ? corr.correlation : 0;
-              const isPositive = val >= 0;
-              const absVal = Math.min(1, Math.abs(val));
-              const strength = corr.strength || (
-                absVal >= 0.6 ? (isPositive ? "Strong Positive" : "Strong Negative") :
-                absVal >= 0.2 ? (isPositive ? "Moderate Positive" : "Moderate Negative") :
-                (isPositive ? "Weak Positive" : "Weak Negative")
-              );
+        {topCorrelations.length > 0 ? (
+          <>
+            {/* Correlation Matrix Heatmap Chart */}
+            {(corrViewMode === "both" || corrViewMode === "heatmap") && (
+              <CorrelationHeatmap
+                columns={correlations?.columns || []}
+                matrix={correlations?.matrix || []}
+                topCorrelations={topCorrelations}
+              />
+            )}
 
-              return (
-                <div className="correlation-card" key={idx}>
-                  <div className="corr-header">
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <TrendingUp
-                        size={16}
-                        style={{
-                          transform: isPositive ? "none" : "rotate(90deg)",
-                          color: isPositive ? "#2e7d32" : "#c62828",
-                        }}
-                      />
-                      <span className={`corr-strength-badge ${isPositive ? "positive" : "negative"}`}>
-                        {strength}
-                      </span>
+            {/* Key Relationship Cards */}
+            {(corrViewMode === "both" || corrViewMode === "cards") && (
+              <div className="correlations-grid">
+                {topCorrelations.map((corr, idx) => {
+                  const col1 = corr.feature_a || corr.column1 || corr.col1 || "Feature A";
+                  const col2 = corr.feature_b || corr.column2 || corr.col2 || "Feature B";
+                  const val = typeof corr.correlation === "number" ? corr.correlation : 0;
+                  const isPositive = val >= 0;
+                  const absVal = Math.min(1, Math.abs(val));
+
+                  // Standard 5-tier classification scale
+                  const tier = corr.tier || (
+                    absVal >= 0.80 ? "Very Strong" :
+                    absVal >= 0.60 ? "Strong" :
+                    absVal >= 0.40 ? "Moderate" :
+                    absVal >= 0.20 ? "Weak" :
+                    "Very Weak"
+                  );
+                  const strength = corr.strength || `${tier} ${isPositive ? "Positive" : "Negative"}`;
+
+                  return (
+                    <div className="correlation-card" key={idx}>
+                      <div className="corr-header">
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {isPositive ? (
+                            <TrendingUp
+                              size={16}
+                              style={{ color: "#16a34a" }}
+                            />
+                          ) : (
+                            <TrendingDown
+                              size={16}
+                              style={{ color: "#dc2626" }}
+                            />
+                          )}
+                          <span className={`corr-strength-badge ${isPositive ? "positive" : "negative"}`}>
+                            {strength}
+                          </span>
+                        </div>
+                        <span className={`corr-value-badge ${isPositive ? "positive" : "negative"}`}>
+                          {val > 0 ? `+${val.toFixed(3)}` : val.toFixed(3)}
+                        </span>
+                      </div>
+
+                      <div className="corr-features-row">
+                        <span className="corr-feature-name" title={col1}>{col1}</span>
+                        <span className="corr-vs-badge">vs</span>
+                        <span className="corr-feature-name" title={col2}>{col2}</span>
+                      </div>
+
+                      <div className="corr-bar-section">
+                        <div className="corr-track">
+                          <div
+                            className="corr-val-fill"
+                            style={{
+                              width: `${Math.max(4, absVal * 100)}%`,
+                              background: isPositive ? "#16a34a" : "#dc2626",
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <span className={`corr-value-badge ${isPositive ? "positive" : "negative"}`}>
-                      {val > 0 ? `+${val.toFixed(3)}` : val.toFixed(3)}
-                    </span>
-                  </div>
-
-                  <div className="corr-features-row">
-                    <span className="corr-feature-name" title={col1}>{col1}</span>
-                    <span className="corr-vs-badge">vs</span>
-                    <span className="corr-feature-name" title={col2}>{col2}</span>
-                  </div>
-
-                  <div className="corr-bar-section">
-                    <div className="corr-track">
-                      <div
-                        className="corr-val-fill"
-                        style={{
-                          width: `${Math.max(4, absVal * 100)}%`,
-                          background: isPositive ? "#2e7d32" : "#c62828",
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="analysis-empty-card">
+            <GitCommit size={24} className="empty-card-icon" />
+            <h4>Not enough numeric variables</h4>
+            <p>
+              At least two suitable numeric columns are required to calculate correlations.
+              This dataset currently contains {correlations?.numeric_column_count ?? 0} suitable numeric column(s).
+            </p>
           </div>
-        </section>
-      )}
+        )}
+      </section>
     </main>
   );
 }
