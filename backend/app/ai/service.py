@@ -58,7 +58,7 @@ AUTOMATICALLY DETECTED INSIGHTS:
 CORRELATIONS:
 {correlations}
 
-Return your response using EXACTLY this structured format:
+Return your response using EXACTLY this structured format (use clear bullet points with 'Title: Description'):
 
 SUMMARY:
 <2-3 concise sentences summarizing what the dataset represents, its dimensions, and overall structure>
@@ -67,12 +67,29 @@ DATA QUALITY:
 <Concise assessment of missing values, duplicate rows, outliers, and data health score>
 
 KEY FINDINGS:
-<Bulleted list of the most notable patterns, correlations, distributions, and anomalies>
+• <Finding 1 Topic>: <Detailed explanation of pattern, correlation, or distribution>
+• <Finding 2 Topic>: <Detailed explanation of pattern, correlation, or distribution>
+• <Finding 3 Topic>: <Detailed explanation of pattern, correlation, or distribution>
 
 RECOMMENDATIONS:
-<Actionable next steps for data cleaning, preprocessing, feature engineering, and downstream ML modeling>
+• <Action 1 Topic>: <Actionable next step for cleaning, engineering, or modeling>
+• <Action 2 Topic>: <Actionable next step for cleaning, engineering, or modeling>
+• <Action 3 Topic>: <Actionable next step for cleaning, engineering, or modeling>
 """
     return prompt.strip()
+
+
+def _clean_markdown_artifacts(text: str) -> str:
+    """Clean unclosed asterisks and normalize section text."""
+    if not text:
+        return ""
+    lines = []
+    for line in text.split("\n"):
+        clean_line = line.strip()
+        # Normalize patterns like 'Topic:** Description' to 'Topic: Description'
+        clean_line = re.sub(r"^([A-Za-z0-9\s_\-\(\)`\/\.,]+):\*\*\s*", r"\1: ", clean_line)
+        lines.append(clean_line)
+    return "\n".join(lines).strip()
 
 
 def _parse_ai_sections(raw_text: str) -> dict[str, Any]:
@@ -95,10 +112,10 @@ def _parse_ai_sections(raw_text: str) -> dict[str, Any]:
     for key, pattern in patterns.items():
         match = re.search(pattern, raw_text, re.DOTALL | re.IGNORECASE)
         if match:
-            sections[key] = match.group(1).strip()
+            sections[key] = _clean_markdown_artifacts(match.group(1).strip())
 
     if not sections["summary"] and raw_text:
-        sections["summary"] = raw_text[:300].strip()
+        sections["summary"] = _clean_markdown_artifacts(raw_text[:300].strip())
 
     return sections
 

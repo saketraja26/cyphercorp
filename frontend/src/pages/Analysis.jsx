@@ -58,16 +58,82 @@ function formatStatValue(val, colName = "", metricType = "") {
   return String(val);
 }
 
+function formatInlineTokens(str) {
+  if (!str) return null;
+  const cleanStr = String(str);
+  // Split by inline backticks `code` or **bold**
+  const parts = cleanStr.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      return (
+        <code key={idx} className="mono ai-inline-code">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return (
+        <strong key={idx} className="ai-item-title">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part.replace(/\*{1,2}/g, "");
+  });
+}
+
+function renderFormattedAiText(text) {
+  if (!text) return null;
+  let clean = String(text).trim();
+
+  // Strip leading bullet markers like "•", "-", "*", "1.", "1.1."
+  clean = clean.replace(/^[•\-\*\u2022\u25E6\u2043\u2219]+\s*/, "");
+  clean = clean.replace(/^\d+[\.\)]\s*/, "");
+
+  // Match patterns like "Attrition Target (`LeaveOrNot`):** Approx..." or "**Title:** Desc" or "Title: Desc"
+  const titleRegex = /^(\*{0,2})([A-Za-z0-9\s_\-\(\)`\/\.,'"]+?)(:?\*{1,2}:?|\:)\s*(.*)$/s;
+  const match = clean.match(titleRegex);
+
+  if (match) {
+    let rawTitle = match[2].replace(/\*+/g, "").trim();
+    let body = match[4].replace(/^\*+/, "").replace(/\*+$/, "").trim();
+
+    // Ensure title doesn't end with redundant colon
+    rawTitle = rawTitle.replace(/:$/, "").trim();
+
+    return (
+      <>
+        <strong className="ai-item-title">
+          {formatInlineTokens(rawTitle)}:
+        </strong>{" "}
+        <span className="ai-item-body">{formatInlineTokens(body)}</span>
+      </>
+    );
+  }
+
+  return formatInlineTokens(clean);
+}
+
 function formatList(item) {
   if (!item) return [];
-  if (Array.isArray(item)) return item;
-  if (typeof item === "string") {
-    return item
-      .split("\n")
-      .map((s) => s.replace(/^[•\-\*\d\.\s\uFFFD]+/, "").trim())
-      .filter(Boolean);
+  let rawList = [];
+  if (Array.isArray(item)) {
+    rawList = item.flatMap((sub) =>
+      typeof sub === "string" ? sub.split("\n") : [String(sub)]
+    );
+  } else if (typeof item === "string") {
+    rawList = item.split("\n");
   }
-  return [];
+
+  return rawList
+    .map((s) => s.trim())
+    .filter(
+      (s) =>
+        s.length > 0 &&
+        !s.match(
+          /^(KEY FINDINGS|RECOMMENDATIONS|SUMMARY|DATA QUALITY|KEY OBSERVATIONS|RECOMMENDED ACTIONS):?$/i
+        )
+    );
 }
 
 function Analysis() {
@@ -81,41 +147,63 @@ function Analysis() {
   const [datasets, setDatasets] = useState([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState(activeParamId || "");
   const [analysis, setAnalysis] = useState(null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
 
   // 1. Fetch available datasets
   useEffect(() => {
+    let isMounted = true;
+
     const loadDatasets = async () => {
       try {
         const res = await getDatasets();
         const list = res.data || [];
+        if (!isMounted) return;
+
         setDatasets(list);
 
-        if (!activeParamId && list.length > 0) {
+        if (list.length === 0) {
+          setInitialLoading(false);
+          setLoading(false);
+          return;
+        }
+
+        if (!activeParamId) {
           const defaultId = String(list[0].id);
           setSelectedDatasetId(defaultId);
           navigate(`/analysis/${defaultId}`, { replace: true });
-        } else if (activeParamId) {
-          setSelectedDatasetId(String(activeParamId));
         } else {
-          setLoading(false);
+          setSelectedDatasetId(String(activeParamId));
         }
       } catch (err) {
         console.error("Failed to load datasets:", err);
+        if (isMounted) {
+          setError("Failed to fetch datasets list.");
+        }
+      } finally {
+        if (isMounted) {
+          setInitialLoading(false);
+        }
       }
     };
+
     loadDatasets();
+    return () => {
+      isMounted = false;
+    };
   }, [activeParamId, navigate]);
 
   // 2. Fetch analysis for selected dataset
   useEffect(() => {
     const targetId = activeParamId || selectedDatasetId;
     if (!targetId) {
-      if (datasets.length === 0) setLoading(false);
+      // Waiting for dataset resolution, do not clear loading
       return;
     }
+
+    let isMounted = true;
 
     const loadAnalysis = async () => {
       try {
@@ -124,18 +212,26 @@ function Analysis() {
         setAnalysis(null);
 
         const data = await getDatasetAnalysis(targetId);
+        if (!isMounted) return;
         setAnalysis(data);
       } catch (err) {
         console.error("Failed to load dataset analysis:", err);
-        setError(
-          err.response?.data?.detail || "Unable to load dataset analysis."
-        );
+        if (isMounted) {
+          setError(
+            err.response?.data?.detail || "Unable to load dataset analysis."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     loadAnalysis();
+    return () => {
+      isMounted = false;
+    };
   }, [activeParamId, selectedDatasetId]);
 
   const handleDatasetChange = (newId) => {
@@ -174,7 +270,7 @@ function Analysis() {
   /* =========================
      NO DATASETS EMPTY STATE
   ========================= */
-  if (!loading && datasets.length === 0) {
+  if (!initialLoading && !loading && datasets.length === 0) {
     return (
       <main className="dashboard">
         <input
@@ -430,13 +526,19 @@ function Analysis() {
           <div className="ai-interpretation-card">
             <div className="ai-content">
               {typeof aiAnalysis === "string" ? (
-                <p>{aiAnalysis}</p>
+                <p>{renderFormattedAiText(aiAnalysis)}</p>
               ) : (
                 <>
                   {aiAnalysis.summary && (
                     <div className="ai-block">
                       <h4>EXECUTIVE SUMMARY</h4>
-                      <p>{aiAnalysis.summary}</p>
+                      <p>{renderFormattedAiText(aiAnalysis.summary)}</p>
+                    </div>
+                  )}
+                  {aiAnalysis.data_quality && (
+                    <div className="ai-block">
+                      <h4>DATA QUALITY AUDIT</h4>
+                      <p>{renderFormattedAiText(aiAnalysis.data_quality)}</p>
                     </div>
                   )}
                   {findingsList.length > 0 && (
@@ -444,7 +546,7 @@ function Analysis() {
                       <h4>KEY OBSERVATIONS</h4>
                       <ul>
                         {findingsList.map((f, i) => (
-                          <li key={i}>{f}</li>
+                          <li key={i}>{renderFormattedAiText(f)}</li>
                         ))}
                       </ul>
                     </div>
@@ -454,7 +556,7 @@ function Analysis() {
                       <h4>RECOMMENDED ACTIONS</h4>
                       <ul>
                         {recommendationsList.map((r, i) => (
-                          <li key={i}>{r}</li>
+                          <li key={i}>{renderFormattedAiText(r)}</li>
                         ))}
                       </ul>
                     </div>
