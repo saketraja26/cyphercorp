@@ -68,6 +68,31 @@ code {
   flex-shrink: 0;
 }
 
+.sidebar-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-close-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.sidebar-close-btn:hover {
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -172,6 +197,30 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mobile-menu-btn {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px 8px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mobile-menu-btn:hover {
+  background: var(--surface-alt);
 }
 
 .breadcrumb {
@@ -3682,4 +3731,724 @@ code {
 .session-signout-btn:hover {
   background: #fca5a5;
   color: #991b1b;
+}
+
+/* ==========================================================================
+   COMPREHENSIVE RESPONSIVE DESIGN (TABLETS & MOBILE DEVICES)
+   ========================================================================== */
+
+/* Ensure touch-friendly smooth horizontal scrolling on tables & code */
+.table-scroll-wrapper,
+.profile-table {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+pre,
+code {
+  max-width: 100%;
+  word-break: break-word;
+}
+
+/* --------------------------------------------------------------------------
+   Tablets & Mobile (< 900px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .header {
+    padding: 0 18px;
+  }
+
+  .breadcrumb,
+  .search {
+    display: none;
+  }
+
+  .dashboard,
+  .analysis-page,
+  .sql-analyst-page,
+  .ml-studio-page,
+  .settings-page {
+    padding: 32px 20px 60px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Mobile Viewports (< 768px) - Full Mobile Overhaul
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: hidden;
+    width: 100%;
+    position: relative;
+  }
+
+  /* 1. App Shell & Mobile Navigation Drawer */
+  .app {
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 275px;
+    max-width: 82vw;
+    height: 100vh;
+    z-index: 1200;
+    background: #f1f0eb;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.18);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar.open .brand span,
+  .sidebar.open .nav-item span,
+  .sidebar.open .nav-label,
+  .sidebar.open .sidebar-footer span:last-child {
+    display: inline-block !important;
+  }
+
+  .sidebar.open .brand {
+    justify-content: flex-start !important;
+    padding: 0 !important;
+  }
+
+  .sidebar.open .nav-item {
+    justify-content: flex-start !important;
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    z-index: 1150;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .sidebar-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+
+  .main {
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* 2. Header */
+  .header {
+    height: 58px;
+    padding: 0 14px;
+    gap: 8px;
+  }
+
+  .breadcrumb {
+    display: block !important;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 170px;
+  }
+
+  .search {
+    display: none;
+  }
+
+  .profile-dropdown-menu {
+    right: 0;
+    width: 260px;
+  }
+
+  /* 3. Page Layout Containers */
+  .dashboard,
+  .analysis-page,
+  .sql-analyst-page,
+  .ml-studio-page,
+  .settings-page {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 20px 14px 60px !important;
+  }
+
+  /* 4. Dashboard & Datasets */
+  .welcome {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .welcome h1 {
+    font-size: clamp(28px, 7vw, 36px);
+    margin: 6px 0 10px;
+  }
+
+  .intro {
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+
+  .welcome .primary-button {
+    width: 100%;
+    justify-content: center;
+    margin-top: 4px;
+    padding: 12px 18px;
+    font-size: 13px;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr !important;
+    margin-top: 32px;
+  }
+
+  .metric {
+    padding: 16px 14px;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .metric:last-child {
+    border-bottom: 0;
+  }
+
+  .metric-value {
+    font-size: 26px;
+    margin: 6px 0;
+  }
+
+  .datasets-section {
+    margin-top: 36px;
+  }
+
+  .section-heading {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .section-heading h2 {
+    font-size: 20px;
+  }
+
+  .dataset-card {
+    padding: 14px 12px;
+    flex-wrap: wrap;
+    gap: 12px;
+    min-height: auto;
+  }
+
+  .dataset-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .dataset-info {
+    flex: 1 1 calc(100% - 55px);
+    min-width: 0;
+  }
+
+  .dataset-info h3 {
+    font-size: 13.5px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .dataset-health {
+    display: none !important;
+  }
+
+  .open-button {
+    margin-left: auto;
+    padding: 8px 14px;
+    font-size: 11px;
+  }
+
+  .insight-preview {
+    margin-top: 36px;
+    padding: 18px 14px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .insight-preview .insight-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .insight-preview h2 {
+    font-size: 16px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .insight-preview p:last-child {
+    font-size: 12px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .insight-preview .secondary-button {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 16px;
+  }
+
+  /* 5. SQL Analyst */
+  .sql-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 18px;
+    padding-bottom: 24px;
+  }
+
+  .sql-header h1 {
+    font-size: clamp(26px, 6.5vw, 34px);
+  }
+
+  .dataset-selector-wrapper {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+  }
+
+  .dataset-select-box {
+    width: 100%;
+  }
+
+  .dataset-select-box select {
+    width: 100%;
+    max-width: 100%;
+    font-size: 13px;
+  }
+
+  .console-mode-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .mode-toggle {
+    display: flex;
+    width: 100%;
+  }
+
+  .mode-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 6px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .safe-guard-badge {
+    justify-content: center;
+    font-size: 11px;
+  }
+
+  .input-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .input-wrapper input {
+    width: 100%;
+    font-size: 13px;
+    min-width: 0;
+  }
+
+  .input-wrapper .run-btn,
+  .sql-editor-wrapper .run-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+  }
+
+  .suggested-pills-bar {
+    padding: 12px 10px;
+  }
+
+  .pills-list {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .question-pill {
+    width: 100%;
+    text-align: left;
+    white-space: normal;
+    word-break: break-word;
+    font-size: 12px;
+  }
+
+  .result-metrics-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .metric-item {
+    flex: 1 1 calc(50% - 8px);
+    font-size: 11.5px;
+  }
+
+  .sql-ai-answer-card {
+    padding: 16px 14px;
+  }
+
+  .sql-ai-answer-card p {
+    font-size: 13px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .sql-code-viewer pre {
+    padding: 12px 14px;
+    font-size: 11px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .sql-data-table-container {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .sql-table {
+    min-width: 320px;
+  }
+
+  .sql-table th,
+  .sql-table td {
+    padding: 9px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .history-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 14px 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .history-item > div:first-child {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .history-item strong {
+    font-size: 13px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .history-item code {
+    display: block;
+    font-size: 11px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    margin-top: 4px;
+    color: var(--muted);
+  }
+
+  .history-meta {
+    font-size: 10.5px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    width: 100%;
+  }
+
+  /* 6. ML Studio */
+  .ml-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 18px;
+    padding-bottom: 24px;
+  }
+
+  .ml-header h1 {
+    font-size: clamp(26px, 6.5vw, 34px);
+  }
+
+  .target-selection-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px;
+  }
+
+  .target-select-card,
+  .automl-action-card {
+    padding: 18px 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .target-meta-box {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+  }
+
+  .train-action-btn,
+  .automl-action-card .train-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 13px 16px;
+  }
+
+  /* Champion Banner */
+  .champion-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 20px 14px;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .champion-badge {
+    width: 44px;
+    height: 44px;
+  }
+
+  .champion-info {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .champion-header-row {
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .champion-banner h2 {
+    font-size: 22px;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    margin: 4px 0 8px;
+  }
+
+  .champion-banner p {
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .ml-card {
+    padding: 18px 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .ml-leaderboard-table {
+    min-width: 520px;
+  }
+
+  .ml-leaderboard-table th,
+  .ml-leaderboard-table td {
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .ml-info-modal-card {
+    width: 92vw;
+    max-width: 420px;
+    padding: 18px 14px;
+  }
+
+  .prediction-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  .predictor-instructions-box {
+    padding: 12px 14px;
+  }
+
+  .predictor-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* 7. Settings Page */
+  .settings-header-content h1 {
+    font-size: clamp(24px, 6vw, 30px);
+  }
+
+  .settings-summary-pills {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+    padding: 12px 12px !important;
+  }
+
+  .settings-pill-stat {
+    border-right: 0 !important;
+    padding-right: 0 !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+  }
+
+  .settings-tabs-bar {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 6px;
+  }
+
+  .settings-tab-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .settings-card {
+    padding: 18px 14px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .profile-hero-row {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 14px;
+  }
+
+  .profile-meta-tags {
+    justify-content: center;
+  }
+
+  .settings-two-col {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .settings-field-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .settings-text-input,
+  .key-input-wrapper,
+  .key-input-wrapper input {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    font-size: 13px;
+  }
+
+  .form-submit-row {
+    width: 100%;
+  }
+
+  .settings-btn-primary {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 16px;
+  }
+
+  .session-info-box {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .session-signout-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* 8. Analysis Page */
+  .analysis-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .dataset-selection-bar {
+    width: 100%;
+  }
+
+  .column-profile-grid,
+  .statistics-grid,
+  .visualization-grid,
+  .quality-overview,
+  .quality-metrics {
+    grid-template-columns: 1fr !important;
+  }
+
+  .chart-container,
+  .distribution-svg,
+  .correlation-matrix {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Small Mobile Devices (< 480px)
+   -------------------------------------------------------------------------- */
+@media (max-width: 480px) {
+  .settings-summary-pills {
+    grid-template-columns: 1fr !important;
+  }
+
+  .result-metrics-bar .metric-item {
+    flex: 1 1 100%;
+  }
+
+  .welcome h1 {
+    font-size: 28px;
+  }
+
+  .section-heading h2 {
+    font-size: 18px;
+  }
 }

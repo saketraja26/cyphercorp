@@ -14,8 +14,11 @@ import Login from "./pages/Login";
 import "./styles/global.css";
 
 
+import { useState, useEffect } from "react";
+
 function ProtectedLayout() {
   const token = localStorage.getItem("access_token");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (!token) {
     return <Navigate to="/login" replace />;
@@ -23,10 +26,13 @@ function ProtectedLayout() {
 
   return (
     <div className="app">
-      <Sidebar />
+      <Sidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
       <div className="main">
-        <Header />
+        <Header
+          isMobileMenuOpen={mobileMenuOpen}
+          onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
+        />
 
         <Routes>
           <Route path="/" element={<Dashboard />} />

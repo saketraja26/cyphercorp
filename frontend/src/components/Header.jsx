@@ -14,10 +14,11 @@ import {
   Sparkles,
   Upload,
   X,
+  Menu,
 } from "lucide-react";
 import { getCurrentUser, getDatasets, logoutUser } from "../services/api";
 
-function Header() {
+function Header({ isMobileMenuOpen = false, onToggleMobileMenu }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -149,7 +150,17 @@ function Header() {
 
   return (
     <header className="header">
-      <div className="breadcrumb">{getBreadcrumb()}</div>
+      <div className="header-left">
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          onClick={onToggleMobileMenu}
+          aria-label="Toggle navigation"
+        >
+          <Menu size={18} />
+        </button>
+        <div className="breadcrumb">{getBreadcrumb()}</div>
+      </div>
 
       <div className="header-actions">
         {/* Search & Command Palette Wrapper */}
