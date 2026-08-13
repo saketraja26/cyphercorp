@@ -1,3 +1,4 @@
+import secrets
 from app.auth.dependencies import get_current_user
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -9,11 +10,15 @@ from app.auth.schemas import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UpdateProfileRequest,
+    ChangePasswordRequest,
+    GoogleLoginRequest,
 )
 from app.auth.security import (
     create_access_token,
-    hash_password,
-    verify_password,
+    hash_password_async,
+    verify_password_async,
+    verify_google_token,
 )
 from app.database.database import AsyncSessionLocal
 from app.models.user import User
@@ -31,21 +36,22 @@ async def get_db():
 
 
 # -------------------------
-# REGISTER
+# REGISTER (FAST SINGLE-PASS)
 # -------------------------
 
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def register(
     data: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    email_clean = data.email.lower().strip()
     result = await db.execute(
         select(User).where(
-            User.email == data.email
+            User.email == email_clean
         )
     )
 
@@ -57,22 +63,31 @@ async def register(
             detail="Email is already registered",
         )
 
+    # Fast non-blocking password hashing
+    password_hash = await hash_password_async(data.password)
+
     user = User(
-        name=data.name,
-        email=data.email,
-        password_hash=hash_password(data.password),
+        name=data.name.strip(),
+        email=email_clean,
+        password_hash=password_hash,
     )
 
     db.add(user)
-
     await db.commit()
     await db.refresh(user)
 
-    return user
+    # Immediately issue token for instant zero-lag login
+    access_token = create_access_token(user.id)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user,
+    }
 
 
 # -------------------------
-# LOGIN
+# LOGIN (NON-BLOCKING FAST VERIFICATION)
 # -------------------------
 
 @router.post(
@@ -83,9 +98,10 @@ async def login(
     data: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    email_clean = data.email.lower().strip()
     result = await db.execute(
         select(User).where(
-            User.email == data.email
+            User.email == email_clean
         )
     )
 
@@ -97,10 +113,12 @@ async def login(
             detail="Invalid email or password",
         )
 
-    if not verify_password(
+    is_valid = await verify_password_async(
         data.password,
         user.password_hash,
-    ):
+    )
+
+    if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -114,14 +132,61 @@ async def login(
         "user": user,
     }
 
-from app.auth.schemas import (
-    LoginRequest,
-    RegisterRequest,
-    TokenResponse,
-    UserResponse,
-    UpdateProfileRequest,
-    ChangePasswordRequest,
+
+# -------------------------
+# GOOGLE SIGN-IN / OAUTH
+# -------------------------
+
+@router.post(
+    "/google",
+    response_model=TokenResponse,
 )
+async def google_auth(
+    data: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    if not data.credential:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google credential token is required.",
+        )
+
+    try:
+        google_payload = await verify_google_token(data.credential)
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google authentication failed: {str(err)}",
+        )
+
+    email_clean = google_payload["email"].lower().strip()
+    name_clean = (google_payload.get("name") or email_clean.split("@")[0]).strip()
+
+    result = await db.execute(
+        select(User).where(User.email == email_clean)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Auto-create user account with random unusable password hash
+        random_secret = secrets.token_urlsafe(32)
+        pwd_hash = await hash_password_async(random_secret)
+        user = User(
+            name=name_clean,
+            email=email_clean,
+            password_hash=pwd_hash,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    access_token = create_access_token(user.id)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user,
+    }
 
 
 @router.get("/me", response_model=UserResponse)

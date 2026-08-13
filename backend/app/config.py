@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
 
+    google_client_id: str = ""
+
     class Config:
         env_file = [str(_ENV_PATH), ".env", "backend/.env"]
         extra = "ignore"

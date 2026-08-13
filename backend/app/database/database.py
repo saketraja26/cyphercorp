@@ -58,11 +58,23 @@ def get_clean_database_url_and_args(raw_url: str):
 
 clean_db_url, db_connect_args = get_clean_database_url_and_args(settings.database_url)
 
+engine_kwargs = {
+    "connect_args": db_connect_args,
+    "echo": False,
+    "pool_pre_ping": True,
+}
+
+if not clean_db_url.startswith("sqlite"):
+    engine_kwargs.update({
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_recycle": 300,
+        "pool_timeout": 30,
+    })
+
 engine = create_async_engine(
     clean_db_url,
-    connect_args=db_connect_args,
-    echo=False,
-    pool_pre_ping=True,
+    **engine_kwargs,
 )
 
 AsyncSessionLocal = async_sessionmaker(

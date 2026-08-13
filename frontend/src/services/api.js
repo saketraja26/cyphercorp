@@ -47,6 +47,23 @@ export const loginUser = async ({ email, password }) => {
 
 export const registerUser = async ({ name, email, password }) => {
   const response = await api.post("/auth/register", { name, email, password });
+  if (response.data.access_token) {
+    localStorage.setItem("access_token", response.data.access_token);
+    if (response.data.user) {
+      localStorage.setItem("user_info", JSON.stringify(response.data.user));
+    }
+  }
+  return response.data;
+};
+
+export const loginWithGoogle = async (credential) => {
+  const response = await api.post("/auth/google", { credential });
+  if (response.data.access_token) {
+    localStorage.setItem("access_token", response.data.access_token);
+    if (response.data.user) {
+      localStorage.setItem("user_info", JSON.stringify(response.data.user));
+    }
+  }
   return response.data;
 };
 
