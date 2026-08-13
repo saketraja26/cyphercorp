@@ -29,6 +29,7 @@ import {
   predictAutoMl,
 } from "../services/api";
 import TargetSelectDropdown from "../components/TargetSelectDropdown";
+import SEOHead from "../components/SEOHead";
 
 const MODEL_DESCRIPTIONS = {
   "AutoML Pipeline": {
@@ -433,6 +434,11 @@ function MlStudio() {
 
   return (
     <main className="dashboard ml-studio-page">
+      <SEOHead
+        title="Multi-Model AutoML Studio & Benchmarks"
+        description="Automated feature preprocessing, candidate benchmark trainer across Random Forest, Gradient Boosting, Ridge, and live prediction sandbox."
+        canonicalUrl="https://cyphercorp.com/ml"
+      />
       {/* =========================
           INFO MODAL POPUP
       ========================= */}

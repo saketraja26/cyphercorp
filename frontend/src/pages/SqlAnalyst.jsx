@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { getCachedDatasets, getDatasets, getDatasetSqlSchema, executeSqlQuery } from "../services/api";
+import SEOHead from "../components/SEOHead";
 
 function SqlAnalyst() {
   const { datasetId: routeDatasetId } = useParams();
@@ -145,6 +146,11 @@ function SqlAnalyst() {
 
   return (
     <main className="dashboard sql-analyst-page">
+      <SEOHead
+        title="Natural Language AI SQL Analyst"
+        description="Convert plain English questions to deterministic SQL queries. Transparent logic explainers, secure read-only execution, and live table results."
+        canonicalUrl="https://cyphercorp.com/sql"
+      />
       {/* =========================
           HEADER
       ========================= */}

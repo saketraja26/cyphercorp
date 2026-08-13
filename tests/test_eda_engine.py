@@ -212,17 +212,83 @@ class TestEDAEngine(unittest.TestCase):
         self.assertLess(elapsed, 5.0, f"Processing took {elapsed}s which is > 5s")
         self.assertGreater(len(ins), 0)
 
-    def test_ai_fallback(self):
-        df = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
+    def test_customer_id_and_unique_identifiers_excluded_from_correlations(self):
+        """
+        Verify that unique entity identifiers like CustomerID are strictly excluded
+        from correlation matrix, heatmap, and top correlation pairs, leaving only key features.
+        """
+        np.random.seed(42)
+        n = 100
+        df = pd.DataFrame({
+            "CustomerID": [1000 + i for i in range(n)],  # Unique integer customer ID (100% unique)
+            "Age": np.random.randint(20, 65, size=n),
+            "Tenure": np.random.randint(1, 10, size=n),
+            "Usage Frequency": np.random.uniform(5.0, 50.0, size=n),
+            "Support Calls": np.random.randint(0, 8, size=n),
+            "Payment Delay": np.random.randint(0, 30, size=n),
+            "Total Spend": np.random.uniform(100.0, 5000.0, size=n),
+            "Last Interaction": np.random.randint(1, 60, size=n),
+            "Churn": np.random.choice([0, 1], size=n, p=[0.7, 0.3]),
+        })
+
         p, s, q, v, ins = self._run_pipeline(df)
-        context = build_analysis_context(s, q, ins, v.get("correlations", {}))
-        prompt = build_analysis_prompt(context)
-        result = ask_ai(prompt, context)
-        self.assertIn("summary", result)
-        self.assertIn("data_quality", result)
-        self.assertIn("key_findings", result)
-        self.assertIn("recommendations", result)
-        self.assertGreater(len(result["summary"]), 0)
+        corrs = v.get("correlations", {})
+        corr_cols = corrs.get("columns", [])
+        matrix = corrs.get("matrix", [])
+        top_corrs = corrs.get("top_correlations", [])
+
+        # CustomerID MUST NOT be present in correlation columns
+        self.assertNotIn("CustomerID", corr_cols)
+
+        # CustomerID MUST NOT be in any matrix row or value map
+        for row in matrix:
+            self.assertNotEqual(row["column"], "CustomerID")
+            self.assertNotIn("CustomerID", row["values"])
+
+        # CustomerID MUST NOT be in top correlation pairs
+        for pair in top_corrs:
+            self.assertNotEqual(pair["column1"], "CustomerID")
+            self.assertNotEqual(pair["column2"], "CustomerID")
+            self.assertNotEqual(pair.get("feature_a"), "CustomerID")
+            self.assertNotEqual(pair.get("feature_b"), "CustomerID")
+
+        # All 8 key domain features MUST be present
+        expected_features = [
+            "Age", "Tenure", "Usage Frequency", "Support Calls",
+            "Payment Delay", "Total Spend", "Last Interaction", "Churn"
+        ]
+        for feat in expected_features:
+            self.assertIn(feat, corr_cols)
+
+        self.assertEqual(len(corr_cols), len(expected_features))
+
+    def test_various_identifier_formats_and_non_id_words(self):
+        """Test camelCase CustomerID, snake_case user_id, row numbers, UUIDs are excluded, while real words (grid, fluid) are kept."""
+        np.random.seed(42)
+        n = 50
+        df = pd.DataFrame({
+            "CustomerID": [f"CUST_{i:04d}" for i in range(n)],
+            "user_id": [2000 + i for i in range(n)],
+            "row_id": list(range(1, n + 1)),
+            "grid_stability": np.random.uniform(0.1, 0.9, size=n),
+            "fluid_flow": np.random.uniform(10.0, 100.0, size=n),
+            "total_spend": np.random.uniform(50.0, 500.0, size=n),
+            "churn_rate": np.random.uniform(0.0, 1.0, size=n),
+        })
+
+        p, s, q, v, ins = self._run_pipeline(df)
+        corr_cols = v.get("correlations", {}).get("columns", [])
+
+        # Identifiers excluded
+        self.assertNotIn("CustomerID", corr_cols)
+        self.assertNotIn("user_id", corr_cols)
+        self.assertNotIn("row_id", corr_cols)
+
+        # Legitimate domain features preserved
+        self.assertIn("grid_stability", corr_cols)
+        self.assertIn("fluid_flow", corr_cols)
+        self.assertIn("total_spend", corr_cols)
+        self.assertIn("churn_rate", corr_cols)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
+import SEOHead from "../components/SEOHead";
 
 function Datasets() {
   const navigate = useNavigate();
@@ -98,7 +99,12 @@ function Datasets() {
   };
 
   return (
-    <main className="dashboard">
+    <main className="dashboard datasets-page">
+      <SEOHead
+        title="Dataset Management & CSV Ingestion"
+        description="Upload, manage, and inspect isolated CSV datasets for statistical analysis and machine learning training."
+        canonicalUrl="https://cyphercorp.com/datasets"
+      />
       {/* Hidden File Input */}
       <input
         type="file"

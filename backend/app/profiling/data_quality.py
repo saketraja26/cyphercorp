@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
+from app.profiling.identifiers import is_identifier_column
+
 
 def _detect_outliers(series: pd.Series) -> dict[str, Any]:
     """Detect outliers using IQR with Z-score fallback for concentrated distributions."""
@@ -89,12 +91,10 @@ def analyze_data_quality(file_path: str) -> dict[str, Any]:
         )
         unique_count = int(series.nunique(dropna=True))
 
-        # Check for potential ID column (100% unique, no nulls, > 1 row)
-        is_id = False
-        if total_rows > 1 and unique_count == total_rows and missing_count == 0:
-            if not is_numeric_dtype(series) or "id" in column.lower() or "code" in column.lower():
-                is_id = True
-                id_columns.append(column)
+        # Check for potential ID column
+        is_id = is_identifier_column(series, column, total_rows)
+        if is_id:
+            id_columns.append(column)
 
         # Check high cardinality in non-numeric columns
         is_high_cardinality = False

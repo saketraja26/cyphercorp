@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   Lock,
   Mail,
@@ -13,8 +13,10 @@ import {
   BarChart3,
   CheckCircle2,
   AlertCircle,
+  ArrowLeft,
 } from "lucide-react";
 import { loginUser, registerUser, loginWithGoogle } from "../services/api";
+import SEOHead from "../components/SEOHead";
 
 const GoogleIcon = () => (
   <svg className="google-icon-svg" viewBox="0 0 24 24" width="18" height="18">
@@ -63,7 +65,7 @@ function Login() {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (token) {
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     }
   }, [navigate]);
 
@@ -81,7 +83,7 @@ function Login() {
         setGoogleLoading(true);
         setError("");
         await loginWithGoogle(response.credential);
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
       } catch (err) {
         console.error("Google login failed:", err);
         setError(
@@ -157,14 +159,14 @@ function Login() {
           email: email.trim(),
           password,
         });
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
       } else {
         // Fast non-blocking login
         await loginUser({
           email: email.trim(),
           password,
         });
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     } catch (err) {
       console.error("Auth error:", err);
@@ -182,11 +184,27 @@ function Login() {
 
   return (
     <div className="auth-container">
-      {/* Left Brand Showcase Panel */}
+      <SEOHead
+        title={isRegister ? "Create Account — Free AI Data & AutoML Studio" : "Sign In — Enterprise AI Data Studio"}
+        description={
+          isRegister
+            ? "Create your free CypherCorp account to run automated EDA, natural language SQL querying, and AutoML benchmarking in a secure workspace."
+            : "Sign in to CypherCorp AI Data Intelligence platform to access your datasets, SQL analytics, and AutoML models."
+        }
+        keywords="CypherCorp login, AI data analysis sign in, automated EDA platform, AutoML login"
+        canonicalUrl={isRegister ? "https://cyphercorp.com/register" : "https://cyphercorp.com/login"}
+      />
+
+      {/* Left Brand Showcase Panel (Dark Background #111112) */}
       <div className="auth-brand-panel">
         <div className="auth-brand-header">
-          <div className="brand-mark">C</div>
-          <span>CYPHERCORP</span>
+          <Link to="/" className="auth-home-link" title="Back to CypherCorp Home">
+            <img
+              src="/CYPHERCORP Logo_dark_bg.png"
+              alt="CypherCorp"
+              className="auth-full-brand-logo"
+            />
+          </Link>
         </div>
 
         <div className="auth-hero-content">
@@ -228,10 +246,19 @@ function Login() {
         </div>
       </div>
 
-      {/* Right Form Card */}
+      {/* Right Form Card (Light Background) */}
       <div className="auth-form-panel">
         <div className="auth-form-card">
           <div className="auth-card-header">
+            <div className="auth-mobile-brand">
+              <Link to="/" title="Back to CypherCorp Home">
+                <img
+                  src="/CYPHERCORP Logo_light_bg.png"
+                  alt="CypherCorp"
+                  className="auth-mobile-logo"
+                />
+              </Link>
+            </div>
             <p className="eyebrow">
               {isRegister ? "START YOUR JOURNEY" : "WORKSPACE ACCESS"}
             </p>

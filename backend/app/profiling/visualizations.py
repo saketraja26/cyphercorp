@@ -8,6 +8,8 @@ from pandas.api.types import (
     is_numeric_dtype,
 )
 
+from app.profiling.identifiers import is_identifier_column
+
 MAX_CATEGORIES = 10
 DEFAULT_BINS = 8
 
@@ -317,7 +319,7 @@ def _generate_correlation_data(df: pd.DataFrame) -> dict[str, Any]:
     total_rows = len(df)
     numeric_df = df.select_dtypes(include=[np.number])
 
-    # Filter out columns with <= 1 unique value or potential unique integer IDs
+    # Filter out columns with <= 1 unique value or entity identifier columns
     valid_cols = []
     for col in numeric_df.columns:
         series = numeric_df[col].dropna()
@@ -325,9 +327,8 @@ def _generate_correlation_data(df: pd.DataFrame) -> dict[str, Any]:
         if n_unique <= 1:
             continue
 
-        # Exclude sequential index IDs like 'id', 'row_id', 'index' if 100% unique
-        col_lower = str(col).lower()
-        if (col_lower in ("id", "row_id", "index", "record_id", "unnamed: 0") or col_lower.endswith("_id")) and n_unique == total_rows:
+        # Exclude candidate entity identifiers (e.g. CustomerID, user_id, row_id, UUIDs)
+        if is_identifier_column(series, str(col), total_rows):
             continue
 
         valid_cols.append(col)

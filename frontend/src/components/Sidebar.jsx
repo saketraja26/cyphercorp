@@ -7,8 +7,10 @@ import {
   Settings,
   LogOut,
   X,
+  Home,
 } from "lucide-react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, Link, useNavigate } from "react-router-dom";
+import { logoutUser } from "../services/api";
 
 function Sidebar({ isOpen = false, onClose }) {
   const navigate = useNavigate();
@@ -28,10 +30,13 @@ function Sidebar({ isOpen = false, onClose }) {
 
       <aside className={`sidebar ${isOpen ? "open" : ""}`}>
         <div className="sidebar-header-row">
-          <div className="brand">
-            <div className="brand-mark">C</div>
-            <span>CYPHERCORP</span>
-          </div>
+          <Link to="/" className="brand" title="View Home Page" onClick={handleNavClick}>
+            <img
+              src="/CYPHERCORP Logo_light_bg.png"
+              alt="CypherCorp"
+              className="sidebar-full-brand-logo"
+            />
+          </Link>
 
           {/* Close Button for Mobile Drawer */}
           <button
@@ -49,7 +54,7 @@ function Sidebar({ isOpen = false, onClose }) {
             <span className="nav-label">WORKSPACE</span>
 
             <NavLink
-              to="/"
+              to="/dashboard"
               className={({ isActive }) =>
                 `nav-item ${isActive ? "active" : ""}`
               }
@@ -108,6 +113,17 @@ function Sidebar({ isOpen = false, onClose }) {
             <span className="nav-label">SYSTEM</span>
 
             <NavLink
+              to="/"
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+              onClick={handleNavClick}
+            >
+              <Home size={17} />
+              <span>Home</span>
+            </NavLink>
+
+            <NavLink
               to="/settings"
               className={({ isActive }) =>
                 `nav-item ${isActive ? "active" : ""}`
@@ -122,8 +138,7 @@ function Sidebar({ isOpen = false, onClose }) {
               className="nav-item"
               onClick={() => {
                 if (onClose) onClose();
-                localStorage.removeItem("access_token");
-                navigate("/login", { replace: true });
+                logoutUser();
               }}
             >
               <LogOut size={17} />

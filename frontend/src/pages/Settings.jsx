@@ -16,6 +16,7 @@ import {
   Fingerprint,
 } from "lucide-react";
 import { getCurrentUser, updateProfile, changePassword, logoutUser } from "../services/api";
+import SEOHead from "../components/SEOHead";
 
 function Settings() {
   const navigate = useNavigate();
@@ -160,6 +161,11 @@ function Settings() {
 
   return (
     <div className="settings-page">
+      <SEOHead
+        title="Workspace Settings & Account Security"
+        description="Manage your tenant profile credentials, security password keys, and preferences."
+        canonicalUrl="https://cyphercorp.com/settings"
+      />
       {/* Header */}
       <div className="settings-header">
         <div className="settings-header-content">

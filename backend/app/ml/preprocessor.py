@@ -7,40 +7,13 @@ from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-# Common identifier column name tokens and patterns
-ID_REGEX_PATTERNS = [
-    r"^id$",
-    r"^.*_id$",
-    r"^id_.*$",
-    r"^.*id$",
-    r"^.*_pk$",
-    r"^pk_.*$",
-    r"^.*_key$",
-    r"^key_.*$",
-    r"^.*_code$",
-    r"^.*_uuid$",
-    r"^.*_guid$",
-    r"^uuid$",
-    r"^guid$",
-    r"^ssn$",
-    r"^.*_num$",
-    r"^.*_number$",
-    r"^account_?id$",
-    r"^customer_?id$",
-    r"^user_?id$",
-    r"^transaction_?id$",
-    r"^order_?id$",
-    r"^record_?id$",
-    r"^row_?id$",
-    r"^session_?id$",
-    r"^client_?id$",
-    r"^subscriber_?id$",
-    r"^patient_?id$",
-    r"^employee_?id$",
-]
-
-UUID_REGEX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-PREFIX_ID_REGEX = re.compile(r"^[a-zA-Z_\-]+[0-9]+$")
+from app.profiling.identifiers import (
+    ID_REGEX_PATTERNS,
+    UUID_REGEX,
+    PREFIX_ID_REGEX,
+    analyze_column_identifier,
+    is_identifier_column,
+)
 
 # Post-outcome / target leakage keywords
 POST_OUTCOME_PATTERNS = [
@@ -58,109 +31,6 @@ POST_OUTCOME_PATTERNS = [
     r"death",
     r"closed_date",
 ]
-
-
-def analyze_column_identifier(
-    series: pd.Series, col_name: str, total_rows: int
-) -> dict[str, Any]:
-    """
-    Perform deep identifier detection:
-    1. Checks name patterns against standard ID conventions.
-    2. Computes uniqueness ratio.
-    3. Detects sequential integer IDs and monotonic series.
-    4. Detects UUID and sequential prefix string patterns.
-    """
-    col_str = str(col_name).strip()
-    col_lower = col_str.lower().replace("-", "_").replace(" ", "_")
-
-    clean_series = series.dropna()
-    if clean_series.empty or total_rows == 0:
-        return {
-            "is_identifier": False,
-            "uniqueness_ratio": 0.0,
-            "confidence": 0.0,
-            "reason": "",
-            "is_sequential": False,
-        }
-
-    unique_count = int(clean_series.nunique())
-    uniqueness_ratio = round(float(unique_count / total_rows), 4)
-
-    # 1. Check Name Patterns
-    name_matched = False
-    for pat in ID_REGEX_PATTERNS:
-        if re.match(pat, col_lower):
-            name_matched = True
-            break
-
-    # 2. Check Monotonicity & Sequential Integers
-    is_sequential = False
-    is_monotonic = False
-    if is_numeric_dtype(clean_series):
-        try:
-            numeric_vals = pd.to_numeric(clean_series, errors="coerce").dropna()
-            if len(numeric_vals) > 1:
-                is_monotonic = bool(numeric_vals.is_monotonic_increasing or numeric_vals.is_monotonic_decreasing)
-                diffs = numeric_vals.diff().dropna()
-                if not diffs.empty and (diffs == 1).sum() / len(diffs) > 0.85:
-                    is_sequential = True
-        except Exception:
-            pass
-
-    # 3. Check UUID or sequential prefix pattern for string series
-    is_uuid_like = False
-    if not is_numeric_dtype(clean_series) and len(clean_series) > 0:
-        sample_vals = [str(v).strip() for v in clean_series.head(50)]
-        uuid_matches = sum(1 for v in sample_vals if UUID_REGEX.match(v))
-        if uuid_matches / len(sample_vals) > 0.8:
-            is_uuid_like = True
-        else:
-            prefix_matches = sum(1 for v in sample_vals if PREFIX_ID_REGEX.match(v))
-            if prefix_matches / len(sample_vals) > 0.8:
-                is_uuid_like = True
-
-    # 4. Synthesize Identifier Confidence & Reason
-    is_id = False
-    confidence = 0.0
-    reason = ""
-
-    # Rule A: Name matches ID pattern + high uniqueness (> 75% or > 50% in dataset > 10 rows)
-    if name_matched and (uniqueness_ratio >= 0.75 or (total_rows > 10 and uniqueness_ratio >= 0.5)):
-        is_id = True
-        confidence = 0.98
-        reason = f"Column name '{col_str}' indicates an entity identifier with {uniqueness_ratio * 100:.1f}% unique values ({unique_count:,}/{total_rows:,})."
-
-    # Rule B: Strictly sequential monotonic integer sequence
-    elif is_sequential and uniqueness_ratio >= 0.90:
-        is_id = True
-        confidence = 0.99
-        reason = f"Column contains a strictly sequential, monotonic integer series ({unique_count:,} unique values)."
-
-    # Rule C: UUID or prefix ID pattern with high cardinality
-    elif is_uuid_like and uniqueness_ratio >= 0.85:
-        is_id = True
-        confidence = 0.95
-        reason = f"Values match UUID / entity key format with {uniqueness_ratio * 100:.1f}% uniqueness."
-
-    # Rule D: 100% unique string column in non-trivial dataset (> 20 rows)
-    elif not is_numeric_dtype(clean_series) and total_rows >= 20 and uniqueness_ratio >= 0.98:
-        is_id = True
-        confidence = 0.85
-        reason = f"High-cardinality string column with {uniqueness_ratio * 100:.1f}% uniqueness ({unique_count:,}/{total_rows:,})."
-
-    # Rule E: Monotonic numeric with 100% uniqueness in large dataset
-    elif is_monotonic and total_rows >= 50 and uniqueness_ratio == 1.0:
-        is_id = True
-        confidence = 0.90
-        reason = f"Monotonic column with 100% unique records ({unique_count:,} unique)."
-
-    return {
-        "is_identifier": is_id,
-        "uniqueness_ratio": uniqueness_ratio,
-        "confidence": confidence,
-        "reason": reason,
-        "is_sequential": is_sequential,
-    }
 
 
 def detect_problem_type(series: pd.Series) -> str:

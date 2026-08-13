@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 
+from app.profiling.identifiers import is_identifier_column
+
 
 def _safe_float(val: Any) -> float | None:
     """Safely convert value to float, returning None if NaN, Inf, or invalid."""
@@ -55,12 +57,12 @@ def calculate_statistics(file_path: str) -> dict[str, Any]:
 
         # Detect semantic type
         semantic_type = "categorical"
-        if is_bool_dtype(series):
+        if is_identifier_column(series, str(column), total_rows):
+            semantic_type = "identifier"
+        elif is_bool_dtype(series):
             semantic_type = "boolean"
         elif is_numeric_dtype(series):
             semantic_type = "numeric"
-        elif total_rows > 1 and unique_count == total_rows and missing_count == 0:
-            semantic_type = "identifier"
 
         column_info["semantic_type"] = semantic_type
 

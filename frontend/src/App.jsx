@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
@@ -10,14 +11,15 @@ import SqlAnalyst from "./pages/SqlAnalyst";
 import MlStudio from "./pages/MlStudio";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
+import Landing from "./pages/Landing";
 
-import { useEffect, useState } from "react";
 import { warmUpBackend } from "./services/api";
 
 function ProtectedLayout() {
   const token = localStorage.getItem("access_token");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // If unauthenticated trying to access protected workspace routes, redirect to login
   if (!token) {
     return <Navigate to="/login" replace />;
   }
@@ -33,7 +35,7 @@ function ProtectedLayout() {
         />
 
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/datasets" element={<Datasets />} />
           <Route path="/analysis" element={<Analysis />} />
           <Route path="/analysis/:datasetId" element={<Analysis />} />
@@ -42,12 +44,12 @@ function ProtectedLayout() {
           <Route path="/ml" element={<MlStudio />} />
           <Route path="/ml/:datasetId" element={<MlStudio />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </div>
     </div>
   );
 }
-
 
 function App() {
   useEffect(() => {
@@ -57,18 +59,21 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public Homepage & Showcase (Always visible on root /) */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/landing" element={<Landing />} />
+        <Route path="/features" element={<Landing />} />
+        <Route path="/faq" element={<Landing />} />
 
-        {/* Public routes */}
+        {/* Authentication */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Login />} />
 
-        {/* Protected application */}
+        {/* Protected Application Workspace */}
         <Route path="/*" element={<ProtectedLayout />} />
-
       </Routes>
     </BrowserRouter>
   );
 }
-
 
 export default App;

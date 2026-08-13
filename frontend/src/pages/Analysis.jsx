@@ -19,6 +19,7 @@ import {
 
 import { getDatasetAnalysis, getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
 import CorrelationHeatmap from "../components/CorrelationHeatmap";
+import SEOHead from "../components/SEOHead";
 
 function formatStatValue(val, colName = "", metricType = "") {
   if (val === null || val === undefined) return "—";
@@ -381,8 +382,20 @@ function Analysis() {
   const findingsList = formatList(aiAnalysis?.key_findings || aiAnalysis?.findings);
   const recommendationsList = formatList(aiAnalysis?.recommendations);
 
+  const datasetName =
+    analysis.dataset_name ||
+    analysis.dataset?.name ||
+    analysis.name ||
+    datasets.find((d) => String(d.id) === String(selectedDatasetId))?.name ||
+    "";
+
   return (
     <main className="dashboard analysis-page">
+      <SEOHead
+        title={datasetName ? `Automated EDA: ${datasetName}` : "Automated EDA & Statistical Profiling"}
+        description="Instant statistical profiling, Pearson correlation heatmaps, IQR anomaly detection, and automated data quality scoring."
+        canonicalUrl="https://cyphercorp.com/analysis"
+      />
       {/* =========================
           HEADER
       ========================= */}

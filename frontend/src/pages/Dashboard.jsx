@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
+import SEOHead from "../components/SEOHead";
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -83,6 +84,11 @@ function Dashboard() {
 
   return (
     <main className="dashboard">
+      <SEOHead
+        title="Workspace Dashboard"
+        description="CypherCorp unified data intelligence workspace. View active datasets, quick EDA statistics, and AutoML benchmark summaries."
+        canonicalUrl="https://cyphercorp.com/dashboard"
+      />
       {/* Hidden File Input */}
       <input
         type="file"

@@ -23,8 +23,9 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem("access_token");
       localStorage.removeItem("user_info");
+      localStorage.removeItem("cached_datasets");
       if (window.location.pathname !== "/login" && window.location.pathname !== "/register") {
-        window.location.href = "/login";
+        window.location.href = "/";
       }
     }
     return Promise.reject(error);
@@ -113,7 +114,7 @@ export const logoutUser = () => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("user_info");
   localStorage.removeItem("cached_datasets");
-  window.location.href = "/login";
+  window.location.href = "/";
 };
 
 // -------------------------

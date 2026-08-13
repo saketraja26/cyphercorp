@@ -1,0 +1,23 @@
+{
+  "name": "CypherCorp — Next-Gen AI Data Intelligence & AutoML Studio",
+  "short_name": "CypherCorp",
+  "description": "Unified platform for Automated Exploratory Data Analysis, Natural Language SQL Querying, and Multi-Model AutoML Benchmarking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f4f0",
+  "theme_color": "#171717",
+  "icons": [
+    {
+      "src": "/Cyphercorp_icon_light_bg.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/CYPHERCORP Logo_light_bg.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["business", "productivity", "developer"]
+}

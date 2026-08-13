@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import {
   Search,
   LogOut,
@@ -13,6 +13,7 @@ import {
   Sparkles,
   X,
   Menu,
+  Home,
 } from "lucide-react";
 import { getCurrentUser, getCachedDatasets, getDatasets, logoutUser } from "../services/api";
 
@@ -128,11 +129,12 @@ function Header({ onToggleMobileMenu }) {
   );
 
   const navigationItems = [
-    { title: "Overview Dashboard", path: "/", icon: <LayoutDashboard size={15} />, group: "NAVIGATE" },
+    { title: "Overview Dashboard", path: "/dashboard", icon: <LayoutDashboard size={15} />, group: "NAVIGATE" },
     { title: "Datasets Library", path: "/datasets", icon: <FileSpreadsheet size={15} />, group: "NAVIGATE" },
     { title: "AI Analysis & Profiler", path: "/analysis", icon: <Sparkles size={15} />, group: "NAVIGATE" },
     { title: "SQL Analyst Console", path: "/sql", icon: <Terminal size={15} />, group: "NAVIGATE" },
     { title: "AutoML Studio", path: "/ml", icon: <Brain size={15} />, group: "NAVIGATE" },
+    { title: "Home Page (Showcase)", path: "/", icon: <Home size={15} />, group: "NAVIGATE" },
   ];
 
   const matchedNav = navigationItems.filter((nav) =>
@@ -286,6 +288,16 @@ function Header({ onToggleMobileMenu }) {
           )}
         </div>
 
+        {/* Quick Link to Home */}
+        <Link
+          to="/"
+          className="header-home-btn"
+          title="Go to Home Page"
+        >
+          <Home size={14} />
+          <span>Home</span>
+        </Link>
+
         {/* User Profile Dropdown */}
         <div className="user-profile-wrapper" ref={profileMenuRef}>
           <button
@@ -311,6 +323,17 @@ function Header({ onToggleMobileMenu }) {
               </div>
 
               <div className="profile-menu-divider" />
+
+              <button
+                className="profile-menu-item"
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  navigate("/");
+                }}
+              >
+                <Home size={15} />
+                <span>Home Page</span>
+              </button>
 
               <button
                 className="profile-logout-btn"
