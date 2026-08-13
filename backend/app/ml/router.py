@@ -64,6 +64,42 @@ async def get_ml_target_candidates(
         )
 
 
+@router.get("/{dataset_id}/ml/benchmark")
+async def get_dataset_benchmark(
+    dataset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy.orm import defer
+    import joblib
+    from app.ml.trainer import MODELS_DIR
+
+    result = await db.execute(
+        select(Dataset)
+        .options(defer(Dataset.csv_data))
+        .where(
+            Dataset.id == dataset_id,
+            Dataset.user_id == current_user.id,
+        )
+    )
+    dataset = result.scalar_one_or_none()
+    if dataset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dataset not found.",
+        )
+
+    benchmark_path = MODELS_DIR / f"benchmark_ds_{dataset.id}.joblib"
+    if benchmark_path.exists():
+        try:
+            cached_data = joblib.load(benchmark_path)
+            return cached_data
+        except Exception:
+            pass
+
+    return {"benchmark": None}
+
+
 @router.post("/{dataset_id}/ml/train")
 async def train_dataset_models(
     dataset_id: int,
@@ -71,8 +107,13 @@ async def train_dataset_models(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    import asyncio
+    from sqlalchemy.orm import defer
+
     result = await db.execute(
-        select(Dataset).where(
+        select(Dataset)
+        .options(defer(Dataset.csv_data))
+        .where(
             Dataset.id == dataset_id,
             Dataset.user_id == current_user.id,
         )
@@ -87,7 +128,9 @@ async def train_dataset_models(
     file_path = ensure_dataset_file(dataset)
 
     try:
-        result = train_automl_pipeline(
+        # Non-blocking async thread execution to keep server responsive
+        result = await asyncio.to_thread(
+            train_automl_pipeline,
             file_path=str(file_path),
             target_column=payload.target_column,
             dataset_id=dataset.id,

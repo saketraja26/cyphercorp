@@ -26,6 +26,7 @@ import {
   getDatasetMlTargets,
   trainAutoMl,
   predictAutoMl,
+  getDatasetBenchmark,
 } from "../services/api";
 
 const MODEL_DESCRIPTIONS = {
@@ -182,28 +183,63 @@ function MlStudio() {
     }
   }, [routeDatasetId]);
 
-  // 3. Load target column candidates
+  // 3. Load target column candidates & restore existing benchmark
   useEffect(() => {
     if (!selectedDatasetId) return;
 
-    const loadTargets = async () => {
+    // Check localStorage cache first for instant zero-lag restore
+    const cached = localStorage.getItem(`ml_benchmark_${selectedDatasetId}`);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed?.leaderboard) {
+          setMlResult(parsed);
+          if (parsed.target_column) {
+            setSelectedTarget(parsed.target_column);
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to parse cached benchmark:", e);
+      }
+    }
+
+    const loadTargetsAndBenchmark = async () => {
       try {
         setError("");
-        setMlResult(null);
-        setPredictionResult(null);
         const res = await getDatasetMlTargets(selectedDatasetId);
         const candidates = res.target_candidates || [];
         setTargets(candidates);
-        if (candidates.length > 0) {
+
+        if (candidates.length > 0 && !selectedTarget) {
           setSelectedTarget(candidates[0].name);
           setTargetInfo(candidates[0]);
+        }
+
+        // Fetch backend benchmark cache if not already restored
+        try {
+          const benchmarkRes = await getDatasetBenchmark(selectedDatasetId);
+          if (benchmarkRes && benchmarkRes.leaderboard) {
+            setMlResult(benchmarkRes);
+            if (benchmarkRes.target_column) {
+              setSelectedTarget(benchmarkRes.target_column);
+              const found = candidates.find((c) => c.name === benchmarkRes.target_column);
+              if (found) setTargetInfo(found);
+            }
+            localStorage.setItem(
+              `ml_benchmark_${selectedDatasetId}`,
+              JSON.stringify(benchmarkRes)
+            );
+          }
+        } catch (bErr) {
+          // Non-fatal, benchmark may not exist yet
         }
       } catch (err) {
         console.error("Failed to load targets:", err);
         setError(err.response?.data?.detail || "Unable to read dataset target columns.");
       }
     };
-    loadTargets();
+
+    loadTargetsAndBenchmark();
   }, [selectedDatasetId]);
 
   // 4. Automatically populate inputs whenever mlResult changes
@@ -236,8 +272,6 @@ function MlStudio() {
     setSelectedTarget(targetName);
     const found = targets.find((t) => t.name === targetName);
     setTargetInfo(found || null);
-    setMlResult(null);
-    setPredictionResult(null);
   };
 
   const handleTrainAutoMl = async () => {
@@ -246,13 +280,22 @@ function MlStudio() {
     try {
       setTraining(true);
       setError("");
-      setMlResult(null);
       setPredictionResult(null);
 
       const res = await trainAutoMl(selectedDatasetId, {
         target_column: selectedTarget,
       });
+
       setMlResult(res);
+      // Persist benchmark so refreshing never loses results
+      try {
+        localStorage.setItem(
+          `ml_benchmark_${selectedDatasetId}`,
+          JSON.stringify(res)
+        );
+      } catch (saveErr) {
+        console.warn("Storage quota exceeded:", saveErr);
+      }
     } catch (err) {
       console.error("AutoML training failed:", err);
       setError(err.response?.data?.detail || "AutoML model training failed.");

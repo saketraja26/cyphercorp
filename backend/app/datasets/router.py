@@ -263,9 +263,11 @@ async def get_datasets(
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy import select
+    from sqlalchemy.orm import defer
 
     result = await db.execute(
         select(Dataset)
+        .options(defer(Dataset.csv_data))
         .where(Dataset.user_id == current_user.id)
         .order_by(Dataset.created_at.desc())
     )

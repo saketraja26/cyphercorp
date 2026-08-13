@@ -170,6 +170,14 @@ export const trainAutoMl = async (datasetId, { target_column }) => {
   return response.data;
 };
 
+export const getDatasetBenchmark = async (datasetId) => {
+  if (!datasetId) {
+    throw new Error("Dataset ID is missing");
+  }
+  const response = await api.get(`/datasets/${datasetId}/ml/benchmark`);
+  return response.data;
+};
+
 export const predictAutoMl = async (datasetId, { model_file, features }) => {
   if (!datasetId) {
     throw new Error("Dataset ID is missing");

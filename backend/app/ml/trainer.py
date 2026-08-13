@@ -31,20 +31,20 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _get_candidate_models(problem_type: str) -> dict[str, Any]:
-    """Return dictionary of candidate models tailored to the problem type with high-speed parallel execution."""
+    """Return dictionary of candidate models tailored to the problem type with high-speed execution."""
     if problem_type == "classification":
         return {
-            "Random Forest Classifier": RandomForestClassifier(n_estimators=60, max_depth=8, n_jobs=-1, random_state=42),
-            "Gradient Boosting": GradientBoostingClassifier(n_estimators=50, max_depth=3, subsample=0.8, random_state=42),
-            "Logistic Regression": LogisticRegression(max_iter=300, solver="lbfgs", random_state=42),
-            "Decision Tree": DecisionTreeClassifier(max_depth=6, random_state=42),
+            "Random Forest Classifier": RandomForestClassifier(n_estimators=25, max_depth=6, n_jobs=1, random_state=42),
+            "Gradient Boosting": GradientBoostingClassifier(n_estimators=25, max_depth=3, subsample=0.8, random_state=42),
+            "Logistic Regression": LogisticRegression(max_iter=150, solver="lbfgs", random_state=42),
+            "Decision Tree": DecisionTreeClassifier(max_depth=5, random_state=42),
         }
     else:
         return {
-            "Random Forest Regressor": RandomForestRegressor(n_estimators=60, max_depth=8, n_jobs=-1, random_state=42),
-            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=50, max_depth=3, subsample=0.8, random_state=42),
+            "Random Forest Regressor": RandomForestRegressor(n_estimators=25, max_depth=6, n_jobs=1, random_state=42),
+            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=25, max_depth=3, subsample=0.8, random_state=42),
             "Ridge Regression": Ridge(alpha=1.0),
-            "Linear Regression": LinearRegression(n_jobs=-1),
+            "Linear Regression": LinearRegression(),
         }
 
 
@@ -231,7 +231,7 @@ def train_automl_pipeline(
     }
     joblib.dump(artifact, model_path)
 
-    return {
+    result_summary = {
         "dataset_id": dataset_id,
         "target_column": target_column,
         "problem_type": problem_type,
@@ -249,3 +249,12 @@ def train_automl_pipeline(
         "feature_importance": feature_importance,
         "model_file": str(model_path),
     }
+
+    # Save benchmark cache so page refresh restores it immediately
+    try:
+        benchmark_path = MODELS_DIR / f"benchmark_ds_{dataset_id}.joblib"
+        joblib.dump(result_summary, benchmark_path)
+    except Exception as save_err:
+        print(f"[AutoML Cache] Failed to save benchmark cache: {save_err}")
+
+    return result_summary
