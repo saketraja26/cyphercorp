@@ -15,14 +15,14 @@ import {
   HelpCircle,
 } from "lucide-react";
 
-import { getDatasets, getDatasetSqlSchema, executeSqlQuery } from "../services/api";
+import { getCachedDatasets, getDatasets, getDatasetSqlSchema, executeSqlQuery } from "../services/api";
 
 function SqlAnalyst() {
   const { datasetId: routeDatasetId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [datasets, setDatasets] = useState([]);
+  const [datasets, setDatasets] = useState(() => getCachedDatasets());
   const [selectedDatasetId, setSelectedDatasetId] = useState(
     routeDatasetId || searchParams.get("datasetId") || ""
   );
@@ -46,7 +46,7 @@ function SqlAnalyst() {
         const res = await getDatasets();
         const list = res.data || [];
         setDatasets(list);
-        if (!selectedDatasetId && list.length > 0) {
+        if (!routeDatasetId && list.length > 0) {
           const defaultId = String(list[0].id);
           setSelectedDatasetId(defaultId);
           navigate(`/sql/${defaultId}`, { replace: true });
@@ -56,11 +56,11 @@ function SqlAnalyst() {
       }
     };
     loadDatasets();
-  }, []);
+  }, [navigate, routeDatasetId]);
 
   // 2. Synchronize route datasetId parameter
   useEffect(() => {
-    if (routeDatasetId && String(routeDatasetId) !== String(selectedDatasetId)) {
+    if (routeDatasetId) {
       setSelectedDatasetId(String(routeDatasetId));
       setQueryResult(null);
       setError("");

@@ -29,7 +29,6 @@ function Settings() {
     email: "",
     created_at: "",
   });
-  const [loadingUser, setLoadingUser] = useState(true);
 
   // Profile Form state
   const [nameInput, setNameInput] = useState("");
@@ -51,7 +50,6 @@ function Settings() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        setLoadingUser(true);
         // Try local storage cache first
         const cached = localStorage.getItem("user_info");
         if (cached) {
@@ -68,8 +66,6 @@ function Settings() {
         }
       } catch (err) {
         console.error("Failed to load user profile:", err);
-      } finally {
-        setLoadingUser(false);
       }
     };
     fetchUser();

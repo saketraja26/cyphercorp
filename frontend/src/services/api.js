@@ -2,6 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000",
+  timeout: 75000, // 75 seconds to comfortably accommodate free-tier cloud cold starts
 });
 
 api.interceptors.request.use(
@@ -29,6 +30,23 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// -------------------------
+// WARM-UP & SYSTEM HELPERS
+// -------------------------
+
+let warmUpInitiated = false;
+
+export const warmUpBackend = async () => {
+  if (warmUpInitiated) return;
+  warmUpInitiated = true;
+  try {
+    // Non-blocking ping to initiate cloud container wake-up early
+    await api.get("/health", { timeout: 60000 });
+  } catch {
+    // Silently ignore ping errors
+  }
+};
 
 // -------------------------
 // AUTH SERVICES
@@ -94,6 +112,7 @@ export const changePassword = async ({ current_password, new_password }) => {
 export const logoutUser = () => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("user_info");
+  localStorage.removeItem("cached_datasets");
   window.location.href = "/login";
 };
 
@@ -101,8 +120,45 @@ export const logoutUser = () => {
 // DATASET SERVICES
 // -------------------------
 
-export const getDatasets = () => {
-  return api.get("/datasets/");
+let inFlightDatasetsPromise = null;
+
+export const getCachedDatasets = () => {
+  try {
+    const raw = localStorage.getItem("cached_datasets");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const setCachedDatasets = (datasets) => {
+  try {
+    if (Array.isArray(datasets)) {
+      localStorage.setItem("cached_datasets", JSON.stringify(datasets));
+    }
+  } catch (e) {
+    console.warn("Could not cache datasets to localStorage", e);
+  }
+};
+
+export const getDatasets = (forceRefresh = false) => {
+  // Deduplicate concurrent in-flight requests
+  if (inFlightDatasetsPromise && !forceRefresh) {
+    return inFlightDatasetsPromise;
+  }
+
+  inFlightDatasetsPromise = api.get("/datasets/")
+    .then((response) => {
+      if (response?.data && Array.isArray(response.data)) {
+        setCachedDatasets(response.data);
+      }
+      return response;
+    })
+    .finally(() => {
+      inFlightDatasetsPromise = null;
+    });
+
+  return inFlightDatasetsPromise;
 };
 
 export const uploadDataset = async (file) => {
@@ -113,6 +169,8 @@ export const uploadDataset = async (file) => {
       "Content-Type": "multipart/form-data",
     },
   });
+  // Invalidate in-flight and update fresh
+  getDatasets(true).catch(() => {});
   return response.data;
 };
 

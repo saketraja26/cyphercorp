@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Search,
-  Bell,
   LogOut,
   Shield,
   FileSpreadsheet,
@@ -12,13 +11,12 @@ import {
   LayoutDashboard,
   ArrowUpRight,
   Sparkles,
-  Upload,
   X,
   Menu,
 } from "lucide-react";
-import { getCurrentUser, getDatasets, logoutUser } from "../services/api";
+import { getCurrentUser, getCachedDatasets, getDatasets, logoutUser } from "../services/api";
 
-function Header({ isMobileMenuOpen = false, onToggleMobileMenu }) {
+function Header({ onToggleMobileMenu }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -34,8 +32,7 @@ function Header({ isMobileMenuOpen = false, onToggleMobileMenu }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [datasets, setDatasets] = useState([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [datasets, setDatasets] = useState(() => getCachedDatasets());
 
   const searchContainerRef = useRef(null);
   const searchInputRef = useRef(null);
@@ -69,7 +66,7 @@ function Header({ isMobileMenuOpen = false, onToggleMobileMenu }) {
     if (localStorage.getItem("access_token")) {
       loadDatasets();
     }
-  }, [location.pathname]);
+  }, []);
 
   // 3. Global Keyboard Shortcut (⌘K or Ctrl+K) & Click Outside
   useEffect(() => {

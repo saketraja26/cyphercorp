@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  Brain,
   Database,
   Trophy,
   Play,
@@ -10,14 +9,10 @@ import {
   BarChart2,
   CheckCircle,
   Zap,
-  HelpCircle,
   Info,
-  ArrowRight,
-  TrendingUp,
   RotateCcw,
   Sparkles,
   Check,
-  AlertTriangle,
   X,
   ShieldCheck,
   Filter,
@@ -26,12 +21,14 @@ import {
 } from "lucide-react";
 
 import {
+  getCachedDatasets,
   getDatasets,
   getDatasetMlTargets,
   trainAutoMl,
-  predictAutoMl,
   getDatasetBenchmark,
+  predictAutoMl,
 } from "../services/api";
+import TargetSelectDropdown from "../components/TargetSelectDropdown";
 
 const MODEL_DESCRIPTIONS = {
   "AutoML Pipeline": {
@@ -135,7 +132,7 @@ function MlStudio() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const [datasets, setDatasets] = useState([]);
+  const [datasets, setDatasets] = useState(() => getCachedDatasets());
   const [selectedDatasetId, setSelectedDatasetId] = useState(
     routeDatasetId || searchParams.get("datasetId") || ""
   );
@@ -169,7 +166,7 @@ function MlStudio() {
         const res = await getDatasets();
         const list = res.data || [];
         setDatasets(list);
-        if (!selectedDatasetId && list.length > 0) {
+        if (!routeDatasetId && list.length > 0) {
           const defaultId = String(list[0].id);
           setSelectedDatasetId(defaultId);
           navigate(`/ml/${defaultId}`, { replace: true });
@@ -179,11 +176,11 @@ function MlStudio() {
       }
     };
     loadDatasets();
-  }, []);
+  }, [navigate, routeDatasetId]);
 
   // 2. Synchronize route datasetId parameter
   useEffect(() => {
-    if (routeDatasetId && String(routeDatasetId) !== String(selectedDatasetId)) {
+    if (routeDatasetId) {
       setSelectedDatasetId(String(routeDatasetId));
       setMlResult(null);
       setPredictionResult(null);
@@ -251,7 +248,7 @@ function MlStudio() {
               JSON.stringify(benchmarkRes)
             );
           }
-        } catch (bErr) {
+        } catch {
           // Non-fatal, benchmark may not exist yet
         }
       } catch (err) {
@@ -570,28 +567,19 @@ function MlStudio() {
 
         <div className="target-selection-grid">
           <div className="target-select-card">
-            <label className="eyebrow">PREDICTIVE TARGET (Y)</label>
-            <select
-              className="target-dropdown"
-              value={selectedTarget}
-              onChange={(e) => handleTargetChange(e.target.value)}
-            >
-              {targets.map((t) => {
-                let statusLabel = "";
-                if (t.is_identifier) {
-                  statusLabel = " [IDENTIFIER - NOT RECOMMENDED]";
-                } else if (t.status === "warning") {
-                  statusLabel = " [WARNING]";
-                } else if (t.status === "recommended") {
-                  statusLabel = " [RECOMMENDED]";
-                }
-                return (
-                  <option key={t.name} value={t.name}>
-                    {t.name} ({t.suggested_task.toUpperCase()}){statusLabel}
-                  </option>
-                );
-              })}
-            </select>
+            <div className="target-select-label-row">
+              <label className="eyebrow">PREDICTIVE TARGET (Y)</label>
+              <span className="target-select-helper-text">
+                Choose outcome category or metric to forecast
+              </span>
+            </div>
+
+            <TargetSelectDropdown
+              targets={targets}
+              selectedTarget={selectedTarget}
+              onSelectTarget={handleTargetChange}
+              disabled={training}
+            />
 
             {targetInfo && (
               <>
@@ -1085,22 +1073,25 @@ function MlStudio() {
                     </div>
 
                     {isCat ? (
-                      <select
-                        className="predict-select-box"
-                        value={String(currentVal)}
-                        onChange={(e) =>
-                          setPredictInputs((prev) => ({
-                            ...prev,
-                            [feat.name]: e.target.value,
-                          }))
-                        }
-                      >
-                        {feat.options.map((opt) => (
-                          <option key={opt} value={String(opt)}>
-                            {String(opt)}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="predict-select-wrapper">
+                        <select
+                          className="predict-select-box"
+                          value={String(currentVal)}
+                          onChange={(e) =>
+                            setPredictInputs((prev) => ({
+                              ...prev,
+                              [feat.name]: e.target.value,
+                            }))
+                          }
+                        >
+                          {feat.options.map((opt) => (
+                            <option key={opt} value={String(opt)}>
+                              {String(opt)}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="predict-select-arrow" />
+                      </div>
                     ) : (
                       <input
                         type="text"

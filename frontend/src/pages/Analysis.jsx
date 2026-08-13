@@ -16,7 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 
-import { getDatasetAnalysis, getDatasets, uploadDataset } from "../services/api";
+import { getDatasetAnalysis, getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
 
 function formatStatValue(val, colName = "", metricType = "") {
   if (val === null || val === undefined) return "—";
@@ -87,11 +87,11 @@ function renderFormattedAiText(text) {
   let clean = String(text).trim();
 
   // Strip leading bullet markers like "•", "-", "*", "1.", "1.1."
-  clean = clean.replace(/^[•\-\*\u2022\u25E6\u2043\u2219]+\s*/, "");
-  clean = clean.replace(/^\d+[\.\)]\s*/, "");
+  clean = clean.replace(/^[•\-*\u2022\u25E6\u2043\u2219]+\s*/, "");
+  clean = clean.replace(/^\d+[.)]\s*/, "");
 
   // Match patterns like "Attrition Target (`LeaveOrNot`):** Approx..." or "**Title:** Desc" or "Title: Desc"
-  const titleRegex = /^(\*{0,2})([A-Za-z0-9\s_\-\(\)`\/\.,'"]+?)(:?\*{1,2}:?|\:)\s*(.*)$/s;
+  const titleRegex = /^(\*{0,2})([A-Za-z0-9\s_()`/.,'"-]+?)(:?\*{1,2}:?|:)\s*(.*)$/s;
   const match = clean.match(titleRegex);
 
   if (match) {
@@ -144,7 +144,7 @@ function Analysis() {
 
   const activeParamId = routeDatasetId || searchParams.get("datasetId");
 
-  const [datasets, setDatasets] = useState([]);
+  const [datasets, setDatasets] = useState(() => getCachedDatasets());
   const [selectedDatasetId, setSelectedDatasetId] = useState(activeParamId || "");
   const [analysis, setAnalysis] = useState(null);
   const [initialLoading, setInitialLoading] = useState(true);

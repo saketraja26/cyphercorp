@@ -1,5 +1,5 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 _ENV_PATH = _BACKEND_DIR / ".env"
@@ -16,9 +16,10 @@ class Settings(BaseSettings):
 
     google_client_id: str = ""
 
-    class Config:
-        env_file = [str(_ENV_PATH), ".env", "backend/.env"]
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=[str(_ENV_PATH), ".env", "backend/.env"],
+        extra="ignore",
+    )
 
 
 settings = Settings()

@@ -6,20 +6,16 @@ import {
   FileSpreadsheet,
   Plus,
   Sparkles,
-  Upload,
-  BarChart3,
-  Terminal,
-  Brain,
 } from "lucide-react";
 
-import { getDatasets, uploadDataset } from "../services/api";
+import { getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
 
 function Dashboard() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  const [datasets, setDatasets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [datasets, setDatasets] = useState(() => getCachedDatasets());
+  const [loading, setLoading] = useState(() => getCachedDatasets().length === 0);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
 

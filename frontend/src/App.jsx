@@ -11,10 +11,8 @@ import MlStudio from "./pages/MlStudio";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 
-import "./styles/global.css";
-
-
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { warmUpBackend } from "./services/api";
 
 function ProtectedLayout() {
   const token = localStorage.getItem("access_token");
@@ -52,6 +50,10 @@ function ProtectedLayout() {
 
 
 function App() {
+  useEffect(() => {
+    warmUpBackend();
+  }, []);
+
   return (
     <BrowserRouter>
       <Routes>

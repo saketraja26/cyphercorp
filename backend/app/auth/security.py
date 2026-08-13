@@ -5,7 +5,7 @@ from pathlib import Path
 import bcrypt
 import httpx
 from jose import JWTError, jwt
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 _ENV_PATH = _BACKEND_DIR / ".env"
@@ -17,9 +17,10 @@ class AuthSettings(BaseSettings):
     jwt_access_token_expire_minutes: int = 60 * 24 * 7  # 7 days for smooth UX
     google_client_id: str | None = None
 
-    class Config:
-        env_file = [str(_ENV_PATH), ".env", "backend/.env"]
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=[str(_ENV_PATH), ".env", "backend/.env"],
+        extra="ignore",
+    )
 
 
 settings = AuthSettings()
