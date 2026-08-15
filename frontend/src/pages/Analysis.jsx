@@ -394,7 +394,7 @@ function Analysis() {
       <SEOHead
         title={datasetName ? `Automated EDA: ${datasetName}` : "Automated EDA & Statistical Profiling"}
         description="Instant statistical profiling, Pearson correlation heatmaps, IQR anomaly detection, and automated data quality scoring."
-        canonicalUrl="https://cyphercorp.com/analysis"
+        canonicalUrl="https://www.cyphercorp.in/analysis"
       />
       {/* =========================
           HEADER

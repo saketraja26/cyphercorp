@@ -87,7 +87,7 @@ function Dashboard() {
       <SEOHead
         title="Workspace Dashboard"
         description="CypherCorp unified data intelligence workspace. View active datasets, quick EDA statistics, and AutoML benchmark summaries."
-        canonicalUrl="https://cyphercorp.com/dashboard"
+        canonicalUrl="https://www.cyphercorp.in/dashboard"
       />
       {/* Hidden File Input */}
       <input

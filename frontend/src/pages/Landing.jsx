@@ -69,7 +69,7 @@ export default function Landing() {
         title="Next-Gen AI Data Intelligence & AutoML Studio"
         description="Instant automated EDA, natural language SQL querying, and multi-model machine learning benchmarks in a secure, tenant-isolated workspace."
         keywords="AI data analysis, automated EDA, natural language SQL, AutoML studio, exploratory data analysis, machine learning benchmarking, data health score, correlation matrix, scikit-learn models, SQL query generator, CSV statistical profiler"
-        canonicalUrl="https://cyphercorp.com/"
+        canonicalUrl="https://www.cyphercorp.in/"
       />
 
       {/* 1. SEMANTIC PUBLIC HEADER / NAVIGATION */}

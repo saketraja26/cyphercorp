@@ -149,7 +149,7 @@ function SqlAnalyst() {
       <SEOHead
         title="Natural Language AI SQL Analyst"
         description="Convert plain English questions to deterministic SQL queries. Transparent logic explainers, secure read-only execution, and live table results."
-        canonicalUrl="https://cyphercorp.com/sql"
+        canonicalUrl="https://www.cyphercorp.in/sql"
       />
       {/* =========================
           HEADER

@@ -103,7 +103,7 @@ function Datasets() {
       <SEOHead
         title="Dataset Management & CSV Ingestion"
         description="Upload, manage, and inspect isolated CSV datasets for statistical analysis and machine learning training."
-        canonicalUrl="https://cyphercorp.com/datasets"
+        canonicalUrl="https://www.cyphercorp.in/datasets"
       />
       {/* Hidden File Input */}
       <input

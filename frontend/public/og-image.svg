@@ -80,7 +80,7 @@
 
     <!-- Footer URL -->
     <g transform="translate(0, 440)">
-      <text x="0" y="24" font-family="'DM Mono', monospace" font-size="16" font-weight="500" fill="#64748b">https://cyphercorp.com</text>
+      <text x="0" y="24" font-family="'DM Mono', monospace" font-size="16" font-weight="500" fill="#64748b">https://www.cyphercorp.in</text>
       <text x="800" y="24" font-family="'DM Sans', sans-serif" font-size="14" font-weight="500" fill="#64748b">Enterprise Tenant Isolated Workspace</text>
     </g>
   </g>

@@ -437,7 +437,7 @@ function MlStudio() {
       <SEOHead
         title="Multi-Model AutoML Studio & Benchmarks"
         description="Automated feature preprocessing, candidate benchmark trainer across Random Forest, Gradient Boosting, Ridge, and live prediction sandbox."
-        canonicalUrl="https://cyphercorp.com/ml"
+        canonicalUrl="https://www.cyphercorp.in/ml"
       />
       {/* =========================
           INFO MODAL POPUP

@@ -10,7 +10,7 @@ export default function SEOHead({
   keywords,
   canonicalUrl,
   ogType = "website",
-  ogImage = "https://cyphercorp.com/og-image.svg",
+  ogImage = "https://www.cyphercorp.in/og-image.svg",
 }) {
   useEffect(() => {
     // 1. Update Document Title

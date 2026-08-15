@@ -164,7 +164,7 @@ function Settings() {
       <SEOHead
         title="Workspace Settings & Account Security"
         description="Manage your tenant profile credentials, security password keys, and preferences."
-        canonicalUrl="https://cyphercorp.com/settings"
+        canonicalUrl="https://www.cyphercorp.in/settings"
       />
       {/* Header */}
       <div className="settings-header">

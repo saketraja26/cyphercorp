@@ -192,7 +192,7 @@ function Login() {
             : "Sign in to CypherCorp AI Data Intelligence platform to access your datasets, SQL analytics, and AutoML models."
         }
         keywords="CypherCorp login, AI data analysis sign in, automated EDA platform, AutoML login"
-        canonicalUrl={isRegister ? "https://cyphercorp.com/register" : "https://cyphercorp.com/login"}
+        canonicalUrl={isRegister ? "https://www.cyphercorp.in/register" : "https://www.cyphercorp.in/login"}
       />
 
       {/* Left Brand Showcase Panel (Dark Background #111112) */}

@@ -10,6 +10,18 @@ Allow: /faq
 Allow: /sitemap.xml
 Disallow: /api/
 
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
 User-agent: Bingbot
 Allow: /
 Allow: /login
@@ -28,4 +40,4 @@ Allow: /faq
 Disallow: /api/
 
 # Sitemap location
-Sitemap: https://cyphercorp.com/sitemap.xml
+Sitemap: https://www.cyphercorp.in/sitemap.xml
