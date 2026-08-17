@@ -289,6 +289,9 @@ def get_target_candidates(file_path: str) -> dict[str, Any]:
     df = pd.read_csv(file_path)
     total_rows = len(df)
 
+    # Use subsample for evaluation if dataset is large to maintain sub-second response
+    eval_df = df.sample(n=5000, random_state=42) if total_rows > 5000 else df
+
     candidates = []
     identifier_cols = []
 
@@ -312,7 +315,7 @@ def get_target_candidates(file_path: str) -> dict[str, Any]:
     ]
 
     for col in df.columns:
-        series = df[col]
+        series = eval_df[col]
         eval_result = evaluate_target_eligibility(series, str(col), total_rows)
         candidates.append(eval_result)
 
@@ -356,12 +359,12 @@ def get_target_candidates(file_path: str) -> dict[str, Any]:
     recommended_target = eligible_candidates[0]["name"] if eligible_candidates else (candidates[0]["name"] if candidates else "")
 
     # Leakage analysis with respect to recommended target
-    leakage_map = detect_target_leakage(df, recommended_target) if recommended_target else {}
+    leakage_map = detect_target_leakage(eval_df, recommended_target) if recommended_target else {}
 
     # Feature Intelligence & Default Exclusions
     feature_intelligence = []
     for col in df.columns:
-        series = df[col]
+        series = eval_df[col]
         id_info = analyze_column_identifier(series, str(col), total_rows)
         unique_cnt = int(series.dropna().nunique())
         is_constant = unique_cnt <= 1
@@ -375,7 +378,7 @@ def get_target_candidates(file_path: str) -> dict[str, Any]:
         if id_info["is_identifier"]:
             exclusion_reason = f"Candidate Identifier: {id_info['reason']}"
         elif is_constant:
-            exclusion_reason = "Constant column with zero predictive variance."
+            exclusion_reason = "Constant feature with zero predictive variance."
         elif is_leakage:
             exclusion_reason = leakage_info["reason"]
 
@@ -436,12 +439,29 @@ def preprocess_and_split(
     if len(data) < 5:
         raise ValueError("Dataset has too few records (< 5) after removing missing target values.")
 
-    # Subsample large datasets (> 3,000 rows) for rapid benchmarking on cloud instances
-    if len(data) > 3000:
-        data = data.sample(n=3000, random_state=random_state)
+    problem_type = detect_problem_type(data[target_column])
+
+    # Intelligent Stratified Subsampling for large datasets (> 8,000 rows)
+    if len(data) > 8000:
+        if problem_type == "classification":
+            try:
+                class_counts = data[target_column].value_counts()
+                if (class_counts >= 2).all() and len(class_counts) <= len(data) / 2:
+                    subsample_size = min(8000, len(data))
+                    data = train_test_split(
+                        data,
+                        train_size=subsample_size,
+                        stratify=data[target_column],
+                        random_state=random_state,
+                    )[0]
+                else:
+                    data = data.sample(n=8000, random_state=random_state)
+            except Exception:
+                data = data.sample(n=8000, random_state=random_state)
+        else:
+            data = data.sample(n=8000, random_state=random_state)
 
     total_rows = len(data)
-    problem_type = detect_problem_type(data[target_column])
 
     # 2. Determine Active Features vs Excluded Features
     candidate_features = [col for col in data.columns if col != target_column]
@@ -496,13 +516,16 @@ def preprocess_and_split(
         y = label_encoder.fit_transform(y_raw.astype(str))
         target_classes = [str(cls) for cls in label_encoder.classes_]
     else:
-        y = pd.to_numeric(y_raw, errors="coerce").fillna(y_raw.median() if not y_raw.dropna().empty else 0.0).values
+        clean_num_y = pd.to_numeric(y_raw.replace([np.inf, -np.inf], np.nan), errors="coerce")
+        median_y = clean_num_y.median() if not clean_num_y.dropna().empty else 0.0
+        y = clean_num_y.fillna(median_y).values
 
-    # 4. Zero-Leakage Train / Test Split FIRST
+    # 4. Zero-Leakage Train / Test Split FIRST with Stratification Safety Guard
     stratify = None
     if problem_type == "classification" and len(np.unique(y)) > 1:
         class_counts = pd.Series(y).value_counts()
-        if (class_counts >= 2).all():
+        # Stratify only if every class has at least 2 instances and not too fragmented
+        if (class_counts >= 2).all() and len(class_counts) <= len(y) / 2:
             stratify = y
 
     X_raw_df = data[active_features].copy()
@@ -522,7 +545,7 @@ def preprocess_and_split(
     # A. Numeric Imputers (fit on train)
     numeric_medians = {}
     for col in num_cols:
-        s_train = pd.to_numeric(X_train_raw[col], errors="coerce").dropna()
+        s_train = pd.to_numeric(X_train_raw[col].replace([np.inf, -np.inf], np.nan), errors="coerce").dropna()
         med = float(s_train.median()) if not s_train.empty else 0.0
         numeric_medians[col] = med
 
@@ -533,31 +556,36 @@ def preprocess_and_split(
         s_train = X_train_raw[col].dropna().astype(str)
         mode_val = str(s_train.mode()[0]) if not s_train.empty else "Missing"
         cat_modes[col] = mode_val
-        top_cats = list(s_train.value_counts().head(15).index)
+        # Cap at top 10 categories to avoid high-cardinality dimension explosion
+        top_cats = list(s_train.value_counts().head(10).index)
         cat_vocab[col] = top_cats
 
     def _transform_partition(raw_partition: pd.DataFrame) -> pd.DataFrame:
         """Apply fitted transformers to a raw partition."""
         transformed = pd.DataFrame(index=raw_partition.index)
 
-        # Impute numeric
+        # Impute numeric & sanitize
         for col in num_cols:
-            clean_s = pd.to_numeric(raw_partition[col], errors="coerce")
-            transformed[col] = clean_s.fillna(numeric_medians[col])
+            clean_s = pd.to_numeric(raw_partition[col].replace([np.inf, -np.inf], np.nan), errors="coerce")
+            med_val = numeric_medians.get(col, 0.0)
+            val_filled = clean_s.fillna(med_val)
+            val_clipped = np.nan_to_num(val_filled.values, nan=med_val, posinf=1e9, neginf=-1e9)
+            transformed[col] = val_clipped
 
         # Impute and One-Hot categorical using training vocab
         for col in cat_cols:
-            clean_cat = raw_partition[col].fillna(cat_modes[col]).astype(str)
-            allowed_cats = cat_vocab[col]
+            clean_cat = raw_partition[col].fillna(cat_modes.get(col, "Missing")).astype(str)
+            allowed_cats = cat_vocab.get(col, [])
             clean_cat_capped = clean_cat.apply(lambda v: v if v in allowed_cats else "Other")
 
-            # Create dummy columns for each category in allowed_cats + Other
+            # Create dummy columns for each category in allowed_cats
             for cat_opt in allowed_cats:
                 dummy_col = f"{col}_{cat_opt}"
                 transformed[dummy_col] = (clean_cat_capped == cat_opt).astype(float)
 
-            # Add 'Other' dummy if present
-            transformed[f"{col}_Other"] = (clean_cat_capped == "Other").astype(float)
+            # Add 'Other' dummy if 'Other' is present
+            if "Other" not in allowed_cats:
+                transformed[f"{col}_Other"] = (clean_cat_capped == "Other").astype(float)
 
         return transformed
 
@@ -566,10 +594,13 @@ def preprocess_and_split(
 
     feature_names = list(X_train_df.columns)
 
-    # C. Fit Scaler ONLY on X_train
+    # C. Fit Scaler ONLY on X_train with safe finite arrays
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_df.values)
-    X_test_scaled = scaler.transform(X_test_df.values)
+    X_train_clean = np.nan_to_num(X_train_df.values, nan=0.0, posinf=1e6, neginf=-1e6)
+    X_test_clean = np.nan_to_num(X_test_df.values, nan=0.0, posinf=1e6, neginf=-1e6)
+
+    X_train_scaled = scaler.fit_transform(X_train_clean)
+    X_test_scaled = scaler.transform(X_test_clean)
 
     return {
         "problem_type": problem_type,
@@ -585,8 +616,8 @@ def preprocess_and_split(
         "cat_vocab": cat_vocab,
         "num_cols": num_cols,
         "cat_cols": cat_cols,
-        "X_train": X_train_df.values,
-        "X_test": X_test_df.values,
+        "X_train": X_train_clean,
+        "X_test": X_test_clean,
         "X_train_scaled": X_train_scaled,
         "X_test_scaled": X_test_scaled,
         "y_train": y_train,

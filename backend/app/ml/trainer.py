@@ -8,6 +8,10 @@ import pandas as pd
 from sklearn.ensemble import (
     GradientBoostingClassifier,
     GradientBoostingRegressor,
+    HistGradientBoostingClassifier,
+    HistGradientBoostingRegressor,
+    ExtraTreesClassifier,
+    ExtraTreesRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
 )
@@ -24,6 +28,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.inspection import permutation_importance
 
 from app.ml.preprocessor import preprocess_and_split
 
@@ -32,31 +37,52 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _get_candidate_models(problem_type: str) -> dict[str, Any]:
-    """Return dictionary of candidate models tailored to the problem type with high-speed execution."""
+    """Return dictionary of candidate models tailored to the problem type with high-precision hyperparameter tuning."""
     if problem_type == "classification":
         return {
-            "Random Forest Classifier": RandomForestClassifier(n_estimators=30, max_depth=6, n_jobs=1, random_state=42),
-            "Gradient Boosting": GradientBoostingClassifier(n_estimators=30, max_depth=3, subsample=0.8, random_state=42),
-            "Logistic Regression": LogisticRegression(max_iter=200, solver="lbfgs", random_state=42),
-            "Decision Tree": DecisionTreeClassifier(max_depth=5, random_state=42),
+            "HistGradient Boosting": HistGradientBoostingClassifier(max_iter=150, max_depth=8, min_samples_leaf=5, l2_regularization=0.05, random_state=42),
+            "Random Forest Classifier": RandomForestClassifier(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
+            "Extra Trees Classifier": ExtraTreesClassifier(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
+            "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, max_depth=5, learning_rate=0.08, subsample=0.85, random_state=42),
+            "Logistic Regression": LogisticRegression(max_iter=500, tol=1e-3, solver="lbfgs", random_state=42),
+            "Decision Tree": DecisionTreeClassifier(max_depth=8, min_samples_leaf=2, random_state=42),
         }
     else:
         return {
-            "Random Forest Regressor": RandomForestRegressor(n_estimators=30, max_depth=6, n_jobs=1, random_state=42),
-            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=30, max_depth=3, subsample=0.8, random_state=42),
-            "Ridge Regression": Ridge(alpha=1.0),
+            "HistGradient Boosting Regressor": HistGradientBoostingRegressor(max_iter=150, max_depth=8, min_samples_leaf=5, l2_regularization=0.05, random_state=42),
+            "Random Forest Regressor": RandomForestRegressor(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
+            "Extra Trees Regressor": ExtraTreesRegressor(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
+            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=100, max_depth=5, learning_rate=0.08, subsample=0.85, random_state=42),
+            "Ridge Regression": Ridge(alpha=1.0, tol=1e-3),
             "Linear Regression": LinearRegression(),
         }
 
 
-def _extract_feature_importance(model: Any, feature_names: list[str]) -> list[dict[str, Any]]:
-    """Extract and normalize feature importance scores."""
+def _extract_feature_importance(
+    model: Any,
+    feature_names: list[str],
+    X_sample: np.ndarray | None = None,
+    y_sample: np.ndarray | None = None,
+) -> list[dict[str, Any]]:
+    """Extract and normalize feature importance scores, filtering out 0% features."""
     importances = None
     if hasattr(model, "feature_importances_"):
         importances = model.feature_importances_
     elif hasattr(model, "coef_"):
         coef = model.coef_
         importances = np.mean(np.abs(coef), axis=0) if coef.ndim > 1 else np.abs(coef)
+    elif X_sample is not None and len(X_sample) > 0 and hasattr(model, "predict"):
+        try:
+            perm = permutation_importance(
+                model,
+                X_sample[:100],
+                y_sample[:100] if y_sample is not None else None,
+                n_repeats=3,
+                random_state=42,
+            )
+            importances = np.maximum(0, perm.importances_mean)
+        except Exception:
+            importances = np.ones(len(feature_names)) / max(1, len(feature_names))
 
     if importances is None or len(importances) != len(feature_names):
         return []
@@ -67,9 +93,211 @@ def _extract_feature_importance(model: Any, feature_names: list[str]) -> list[di
     ranking = [
         {"feature": feature_names[i], "importance": round(float(normalized[i]), 2)}
         for i in range(len(feature_names))
+        if round(float(normalized[i]), 2) > 0
     ]
     ranking.sort(key=lambda x: x["importance"], reverse=True)
     return ranking[:15]
+
+
+def _extract_feature_attribution(
+    model: Any,
+    feature_names: list[str],
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    problem_type: str,
+    target_classes: list[str],
+) -> list[dict[str, Any]]:
+    """
+    Extract normalized feature importance along with directional impact (+/-) and plain-English narratives.
+    Filters out features with 0% importance.
+    """
+    importances = None
+    if hasattr(model, "feature_importances_"):
+        importances = model.feature_importances_
+    elif hasattr(model, "coef_"):
+        coef = model.coef_
+        importances = np.mean(np.abs(coef), axis=0) if coef.ndim > 1 else np.abs(coef)
+    elif X_train is not None and len(X_train) > 0 and hasattr(model, "predict"):
+        try:
+            perm = permutation_importance(
+                model,
+                X_train[:100],
+                y_train[:100] if y_train is not None else None,
+                n_repeats=3,
+                random_state=42,
+            )
+            importances = np.maximum(0, perm.importances_mean)
+        except Exception:
+            importances = np.ones(len(feature_names)) / max(1, len(feature_names))
+
+    if importances is None or len(importances) != len(feature_names):
+        importances = np.ones(len(feature_names)) / max(1, len(feature_names))
+
+    total = np.sum(importances)
+    normalized = (importances / total * 100) if total > 0 else np.zeros_like(importances)
+
+    # Compute correlation / directionality with target
+    directionality = []
+    y_train_num = y_train.astype(float) if problem_type == "classification" else y_train
+
+    for i, fname in enumerate(feature_names):
+        imp_score = round(float(normalized[i]), 2)
+        if imp_score <= 0:
+            continue
+
+        col_vals = X_train[:, i]
+        std_col = float(np.std(col_vals))
+        std_y = float(np.std(y_train_num)) if np.std(y_train_num) > 0 else 1.0
+
+        if std_col > 1e-6 and std_y > 1e-6:
+            r_mat = np.corrcoef(col_vals, y_train_num)
+            r = float(r_mat[0, 1]) if r_mat.shape == (2, 2) else 0.0
+            if np.isnan(r) or np.isinf(r):
+                r = 0.0
+        else:
+            r = 0.0
+
+        # Determine directional impact
+        if abs(r) >= 0.15:
+            direction = "positive" if r > 0 else "negative"
+            direction_label = "+ Positive Impact" if r > 0 else "- Negative Impact"
+            polarity_icon = "+" if r > 0 else "-"
+        elif abs(r) >= 0.05:
+            direction = "positive" if r > 0 else "negative"
+            direction_label = "+ Mild Positive" if r > 0 else "- Mild Negative"
+            polarity_icon = "+" if r > 0 else "-"
+        else:
+            direction = "non_linear"
+            direction_label = "~ Non-linear Driver"
+            polarity_icon = "~"
+
+        # Generate explanatory narrative
+        if problem_type == "classification":
+            target_focus = target_classes[-1] if target_classes else "Target"
+            if direction == "positive":
+                narrative = f"Strong positive driver: Higher '{fname}' significantly elevates likelihood of '{target_focus}' (r = +{r:.2f})."
+            elif direction == "negative":
+                narrative = f"Inverse driver: Higher '{fname}' reduces likelihood of '{target_focus}' (r = {r:.2f})."
+            else:
+                narrative = f"Non-linear partition: Specific value intervals of '{fname}' separate outcome classes."
+        else:
+            if direction == "positive":
+                narrative = f"Direct positive driver: Increasing '{fname}' drives quantitative increases in target (r = +{r:.2f})."
+            elif direction == "negative":
+                narrative = f"Inverse driver: Increasing '{fname}' drives reductions in target value (r = {r:.2f})."
+            else:
+                narrative = f"Non-linear threshold: Optimal ranges of '{fname}' influence predictions non-linearly."
+
+        directionality.append({
+            "feature": fname,
+            "importance": imp_score,
+            "correlation": round(r, 3),
+            "direction": direction,
+            "direction_label": direction_label,
+            "polarity_icon": polarity_icon,
+            "narrative": narrative,
+        })
+
+    directionality.sort(key=lambda x: x["importance"], reverse=True)
+    return directionality
+
+
+def _generate_model_diagnostics(
+    best_model_name: str,
+    problem_type: str,
+    y_test: np.ndarray,
+    y_pred: np.ndarray,
+    target_classes: list[str],
+    leaderboard_score: float,
+) -> dict[str, Any]:
+    """Generate in-depth statistical diagnostics, confusion analysis, and executive narrative."""
+    if problem_type == "classification":
+        cm = confusion_matrix(y_test, y_pred)
+        total_test = len(y_test)
+        correct = int(np.sum(np.diag(cm)))
+        incorrect = total_test - correct
+        misclassification_rate = round(float(incorrect / total_test * 100), 1) if total_test > 0 else 0.0
+
+        # Class breakdown
+        class_metrics = []
+        for idx, cls_name in enumerate(target_classes):
+            tp = int(cm[idx, idx]) if idx < len(cm) else 0
+            fn = int(np.sum(cm[idx, :]) - tp) if idx < len(cm) else 0
+            fp = int(np.sum(cm[:, idx]) - tp) if idx < len(cm) else 0
+            prec = round(float(tp / (tp + fp) * 100), 1) if (tp + fp) > 0 else 0.0
+            rec = round(float(tp / (tp + fn) * 100), 1) if (tp + fn) > 0 else 0.0
+            class_metrics.append({
+                "class_name": cls_name,
+                "precision_pct": prec,
+                "recall_pct": rec,
+                "support": int(np.sum(cm[idx, :])) if idx < len(cm) else 0,
+            })
+
+        # Executive summary narrative
+        if leaderboard_score >= 0.85:
+            grade = "A (High Reliability)"
+            readiness = "Production Ready"
+        elif leaderboard_score >= 0.70:
+            grade = "B (Good Predictor)"
+            readiness = "Suitable for Operational Decision Support"
+        else:
+            grade = "C (Baseline Model)"
+            readiness = "Needs Additional Feature Engineering"
+
+        executive_narrative = (
+            f"The champion {best_model_name} attained an F1 score of {leaderboard_score:.4f} with a {misclassification_rate}% "
+            f"test misclassification rate ({correct}/{total_test} accurate predictions on held-out data). "
+            f"Model Reliability: Grade {grade} • Readiness: {readiness}."
+        )
+
+        return {
+            "grade": grade,
+            "readiness": readiness,
+            "executive_narrative": executive_narrative,
+            "correct_predictions": correct,
+            "incorrect_predictions": incorrect,
+            "misclassification_rate": misclassification_rate,
+            "class_metrics": class_metrics,
+            "total_test_samples": total_test,
+        }
+    else:
+        residuals = y_test - y_pred
+        abs_res = np.abs(residuals)
+        y_test_safe = np.where(y_test == 0, 1e-6, y_test)
+        mape_val = float(np.mean(abs_res / np.abs(y_test_safe)) * 100)
+        mape = round(mape_val, 2) if not (np.isnan(mape_val) or mape_val > 1000) else None
+
+        over_pred_pct = round(float(np.mean(residuals < 0) * 100), 1)
+        under_pred_pct = round(float(np.mean(residuals > 0) * 100), 1)
+        max_error = round(float(np.max(abs_res)), 2)
+
+        if leaderboard_score >= 0.80:
+            grade = "A (High Precision)"
+            readiness = "Production Ready"
+        elif leaderboard_score >= 0.50:
+            grade = "B (Good Fit)"
+            readiness = "Suitable for Trend & Variance Forecasting"
+        else:
+            grade = "C (Baseline Fit)"
+            readiness = "Consider Adding Non-linear Predictors"
+
+        executive_narrative = (
+            f"The champion {best_model_name} explains {max(0.0, leaderboard_score * 100):.1f}% of total variance ($R^2 = {leaderboard_score:.4f}$). "
+            f"Residual analysis shows balanced error spread with {over_pred_pct}% over-predictions and {under_pred_pct}% under-predictions. "
+            f"Model Reliability: Grade {grade} • Readiness: {readiness}."
+        )
+
+        return {
+            "grade": grade,
+            "readiness": readiness,
+            "executive_narrative": executive_narrative,
+            "mape_pct": mape,
+            "over_prediction_pct": over_pred_pct,
+            "under_prediction_pct": under_pred_pct,
+            "max_residual_error": max_error,
+            "mean_residual": round(float(np.mean(residuals)), 2),
+            "residual_std": round(float(np.std(residuals)), 2),
+        }
 
 
 def train_automl_pipeline(
@@ -106,6 +334,7 @@ def train_automl_pipeline(
     candidates = _get_candidate_models(problem_type)
     leaderboard = []
     trained_models = {}
+    model_predictions = {}
 
     # Setup Cross-Validation Strategy on Training Set
     if problem_type == "classification":
@@ -140,6 +369,7 @@ def train_automl_pipeline(
             # 4. Evaluate on Held-out Isolated Test Set
             y_pred = model.predict(X_test)
             trained_models[name] = model
+            model_predictions[name] = y_pred
 
             if problem_type == "classification":
                 acc = round(float(accuracy_score(y_test, y_pred)), 4)
@@ -193,11 +423,30 @@ def train_automl_pipeline(
     best_model_info = leaderboard[0]
     best_model_name = best_model_info["model_name"]
     best_model = trained_models[best_model_name]
+    best_y_pred = model_predictions[best_model_name]
 
-    # 6. Extract Feature Importance
-    feature_importance = _extract_feature_importance(best_model, feature_names)
+    # 6. Extract Feature Importance & Directional Attribution
+    feature_importance = _extract_feature_importance(best_model, feature_names, X_train, y_train)
+    feature_attribution = _extract_feature_attribution(
+        model=best_model,
+        feature_names=feature_names,
+        X_train=X_train,
+        y_train=y_train,
+        problem_type=problem_type,
+        target_classes=prep["target_classes"],
+    )
 
-    # 7. Extract raw feature definitions for UI predictor
+    # 7. Model Diagnostics & Error Breakdown
+    model_diagnostics = _generate_model_diagnostics(
+        best_model_name=best_model_name,
+        problem_type=problem_type,
+        y_test=y_test,
+        y_pred=best_y_pred,
+        target_classes=prep["target_classes"],
+        leaderboard_score=best_model_info["score"],
+    )
+
+    # 8. Extract raw feature definitions for UI predictor
     raw_features = []
     sample_record = {}
     sample_row = df.head(1)
@@ -247,7 +496,7 @@ def train_automl_pipeline(
         })
         sample_record[col] = sample_v
 
-    # 8. Serialize winning pipeline artifact
+    # 9. Serialize winning pipeline artifact
     model_filename = f"model_ds_{dataset_id}_{target_column}_{int(time.time())}.joblib"
     model_path = MODELS_DIR / model_filename
 
@@ -268,6 +517,7 @@ def train_automl_pipeline(
         "cat_modes": prep["cat_modes"],
         "cat_vocab": prep["cat_vocab"],
         "raw_features": raw_features,
+        "feature_attribution": feature_attribution,
         "stratified_split": prep["stratified_split"],
         "excluded_features_info": prep["excluded_features_info"],
         "created_at": time.time(),
@@ -291,6 +541,8 @@ def train_automl_pipeline(
         "best_model_score": best_model_info["score"],
         "leaderboard": leaderboard,
         "feature_importance": feature_importance,
+        "feature_attribution": feature_attribution,
+        "model_diagnostics": model_diagnostics,
         "excluded_features_info": prep["excluded_features_info"],
         "validation_strategy": {
             "cv_folds": 3,

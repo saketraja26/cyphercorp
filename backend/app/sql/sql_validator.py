@@ -23,7 +23,7 @@ DANGEROUS_KEYWORDS = [
     r"\bINTO\s+DUMPFILE\b",
 ]
 
-DEFAULT_LIMIT = 500
+DEFAULT_LIMIT = 1000
 
 
 def clean_sql(raw_sql: str) -> str:

@@ -24,8 +24,9 @@ api.interceptors.response.use(
       localStorage.removeItem("access_token");
       localStorage.removeItem("user_info");
       localStorage.removeItem("cached_datasets");
-      if (window.location.pathname !== "/login" && window.location.pathname !== "/register") {
-        window.location.href = "/";
+      const p = window.location.pathname;
+      if (p !== "/login" && p !== "/register" && !p.startsWith("/admin")) {
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);
@@ -54,14 +55,48 @@ export const warmUpBackend = async () => {
 // -------------------------
 
 export const loginUser = async ({ email, password }) => {
-  const response = await api.post("/auth/login", { email, password });
-  if (response.data.access_token) {
-    localStorage.setItem("access_token", response.data.access_token);
-    if (response.data.user) {
-      localStorage.setItem("user_info", JSON.stringify(response.data.user));
+  const cleanIdentifier = (email || "").trim();
+
+  try {
+    const response = await api.post("/auth/login", { email: cleanIdentifier, password });
+    const data = response.data;
+    if (data.is_admin || data.admin_token) {
+      localStorage.setItem("admin_token", data.admin_token || data.access_token);
+      localStorage.setItem("user_role", "admin");
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("user_info");
+    } else if (data.access_token) {
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("user_role");
+      if (data.user) {
+        localStorage.setItem("user_info", JSON.stringify(data.user));
+      }
     }
+    return data;
+  } catch (err) {
+    // If backend rejected string with 422 (e.g. email validation) or not found, try adminLogin endpoint
+    if (err.response?.status === 422 || err.response?.status === 401 || !cleanIdentifier.includes("@")) {
+      try {
+        const adminRes = await adminLogin({ username: cleanIdentifier, password });
+        if (adminRes?.admin_token) {
+          localStorage.setItem("admin_token", adminRes.admin_token);
+          localStorage.setItem("user_role", "admin");
+          localStorage.removeItem("access_token");
+          localStorage.removeItem("user_info");
+          return {
+            is_admin: true,
+            admin_token: adminRes.admin_token,
+            access_token: adminRes.admin_token,
+          };
+        }
+      } catch (adminErr) {
+        // If admin login also failed, re-throw the original error
+        throw err;
+      }
+    }
+    throw err;
   }
-  return response.data;
 };
 
 export const registerUser = async ({ name, email, password }) => {
@@ -171,15 +206,25 @@ export const uploadDataset = async (file) => {
     },
   });
   // Invalidate in-flight and update fresh
-  getDatasets(true).catch(() => {});
+  getDatasets(true).catch(() => { });
   return response.data;
 };
 
-export const getDatasetAnalysis = async (datasetId) => {
+export const getDatasetAnalysis = async (datasetId, regenerate = false) => {
   if (!datasetId) {
     throw new Error("Dataset ID is missing");
   }
-  const response = await api.get(`/datasets/${datasetId}/analysis`);
+  const response = await api.get(`/datasets/${datasetId}/analysis`, {
+    params: regenerate ? { regenerate: true } : undefined,
+  });
+  return response.data;
+};
+
+export const regenerateDatasetAiAnalysis = async (datasetId) => {
+  if (!datasetId) {
+    throw new Error("Dataset ID is missing");
+  }
+  const response = await api.post(`/datasets/${datasetId}/regenerate-ai-analysis`);
   return response.data;
 };
 
@@ -250,6 +295,54 @@ export const predictAutoMl = async (datasetId, { model_file, features }) => {
     model_file,
     features,
   });
+  return response.data;
+};
+
+// -------------------------
+// ADMIN SERVICES
+// -------------------------
+
+const adminApi = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000",
+  timeout: 15000,
+});
+
+adminApi.interceptors.request.use((config) => {
+  const adminToken = localStorage.getItem("admin_token");
+  if (adminToken) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${adminToken}`;
+  }
+  return config;
+});
+
+export const adminLogin = async ({ username, password }) => {
+  const response = await adminApi.post("/admin/login", { username, password });
+  if (response.data.admin_token) {
+    localStorage.setItem("admin_token", response.data.admin_token);
+  }
+  return response.data;
+};
+
+export const adminLogout = () => {
+  localStorage.removeItem("admin_token");
+};
+
+export const getAdminSettings = async () => {
+  const response = await adminApi.get("/admin/settings");
+  return response.data;
+};
+
+export const updateAdminSettings = async ({ active_provider, active_model }) => {
+  const response = await adminApi.put("/admin/settings", {
+    active_provider,
+    active_model,
+  });
+  return response.data;
+};
+
+export const getAdminProviders = async () => {
+  const response = await adminApi.get("/admin/providers");
   return response.data;
 };
 

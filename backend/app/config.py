@@ -9,12 +9,15 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./cyphercorp.db"
 
     openai_api_key: str = ""
-    openai_model: str = "gpt-5-mini"
+    openai_model: str = "gpt-4.1-mini"
 
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
 
     google_client_id: str = ""
+
+    admin_username: str = ""
+    admin_password: str = ""
 
     model_config = SettingsConfigDict(
         env_file=[str(_ENV_PATH), ".env", "backend/.env"],

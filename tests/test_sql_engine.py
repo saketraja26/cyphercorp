@@ -81,6 +81,39 @@ class TestSqlEngine(unittest.TestCase):
         self.assertEqual(res["columns"], ["category", "total_units"])
         self.assertEqual(res["rows"][0]["category"], "Accessories")
         self.assertEqual(res["rows"][0]["total_units"], 650)
+        self.assertEqual(res["total_dataset_rows"], 5)
+        self.assertEqual(res["scanned_percentage"], 100.0)
+        self.assertTrue(res["is_aggregate"])
+
+    def test_large_dataset_sql_aggregation_accuracy(self):
+        """Test that SQL query execution computes over 100% of rows accurately on a 10,000 row dataset."""
+        n_large = 10000
+        df_large = pd.DataFrame({
+            "category": ["Alpha" if i % 2 == 0 else "Beta" for i in range(n_large)],
+            "amount": [10.0] * n_large,
+        })
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w", newline="") as f:
+            df_large.to_csv(f.name, index=False)
+            large_path = f.name
+
+        try:
+            res = execute_sql_query(large_path, 'SELECT category, COUNT(*) as cnt, SUM(amount) as total_amt FROM dataset GROUP BY category ORDER BY category ASC')
+            self.assertEqual(res["row_count"], 2)
+            self.assertEqual(res["total_dataset_rows"], 10000)
+            self.assertEqual(res["scanned_percentage"], 100.0)
+            self.assertTrue(res["is_aggregate"])
+
+            # Verify exact calculation across 100% of data
+            self.assertEqual(res["rows"][0]["category"], "Alpha")
+            self.assertEqual(res["rows"][0]["cnt"], 5000)
+            self.assertEqual(res["rows"][0]["total_amt"], 50000.0)
+
+            self.assertEqual(res["rows"][1]["category"], "Beta")
+            self.assertEqual(res["rows"][1]["cnt"], 5000)
+            self.assertEqual(res["rows"][1]["total_amt"], 50000.0)
+        finally:
+            if os.path.exists(large_path):
+                os.remove(large_path)
 
     def test_valid_cte_query(self):
         cte_sql = """

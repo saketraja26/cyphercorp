@@ -12,6 +12,8 @@ import MlStudio from "./pages/MlStudio";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Landing from "./pages/Landing";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
 
 import { warmUpBackend } from "./services/api";
 
@@ -68,6 +70,10 @@ function App() {
         {/* Authentication */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Login />} />
+
+        {/* Admin Panel (separate auth, no sidebar) */}
+        <Route path="/admin" element={<AdminLogin />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
 
         {/* Protected Application Workspace */}
         <Route path="/*" element={<ProtectedLayout />} />

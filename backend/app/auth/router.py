@@ -1,4 +1,6 @@
-import secrets
+from datetime import datetime, timedelta, timezone
+from jose import jwt
+from app.config import settings
 from app.auth.dependencies import get_current_user
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -19,6 +21,7 @@ from app.auth.security import (
     hash_password_async,
     verify_password_async,
     verify_google_token,
+    settings as auth_settings,
 )
 from app.database.database import AsyncSessionLocal
 from app.models.user import User
@@ -82,12 +85,14 @@ async def register(
     return {
         "access_token": access_token,
         "token_type": "bearer",
+        "is_admin": False,
+        "admin_token": None,
         "user": user,
     }
 
 
 # -------------------------
-# LOGIN (NON-BLOCKING FAST VERIFICATION)
+# LOGIN (NON-BLOCKING FAST VERIFICATION WITH ADMIN AUTO-DETECTION)
 # -------------------------
 
 @router.post(
@@ -98,10 +103,44 @@ async def login(
     data: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    email_clean = data.email.lower().strip()
+    identifier = data.email.lower().strip()
+
+    # 1. Automatic Admin Account Detection
+    expected_username = (settings.admin_username or "").lower().strip()
+    expected_password = settings.admin_password or ""
+
+    if expected_username and expected_password:
+        is_admin_id = (
+            identifier == expected_username
+            or identifier == f"{expected_username}@cyphercorp.com"
+            or identifier == f"{expected_username}@admin.com"
+            or identifier == "admin"
+        )
+        if is_admin_id and data.password == expected_password:
+            # Issue 24-hour admin JWT token with role="admin"
+            expire = datetime.now(timezone.utc) + timedelta(hours=24)
+            payload = {
+                "sub": "admin",
+                "role": "admin",
+                "exp": expire,
+            }
+            admin_token = jwt.encode(
+                payload,
+                auth_settings.jwt_secret_key,
+                algorithm=auth_settings.jwt_algorithm,
+            )
+            return {
+                "access_token": admin_token,
+                "token_type": "bearer",
+                "is_admin": True,
+                "admin_token": admin_token,
+                "user": None,
+            }
+
+    # 2. Standard User Account Verification
     result = await db.execute(
         select(User).where(
-            User.email == email_clean
+            User.email == identifier
         )
     )
 
@@ -129,6 +168,8 @@ async def login(
     return {
         "access_token": access_token,
         "token_type": "bearer",
+        "is_admin": False,
+        "admin_token": None,
         "user": user,
     }
 

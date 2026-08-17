@@ -6,6 +6,11 @@ try:
 except (ImportError, AttributeError):
     genai = None
 
+try:
+    from openai import OpenAI
+except (ImportError, AttributeError):
+    OpenAI = None
+
 from app.config import settings
 from app.sql.sql_validator import clean_sql, validate_sql
 
@@ -19,30 +24,114 @@ CANDIDATE_MODELS = [
 ]
 
 
-def _call_gemini(prompt: str) -> str | None:
-    """Helper to query Gemini with smart model fallback."""
-    if not settings.gemini_api_key or settings.gemini_api_key.startswith("your_") or genai is None:
+def _get_admin_provider_preference() -> tuple[str, str]:
+    """
+    Synchronously read the admin-configured provider/model from the DB.
+    Returns (active_provider, active_model). Defaults to ("auto", "").
+    """
+    try:
+        from sqlalchemy import create_engine, select as sa_select
+        from app.config import settings as app_settings
+        from app.models.admin_settings import AdminSettings
+
+        db_url = app_settings.database_url
+        if "aiosqlite" in db_url:
+            db_url = db_url.replace("+aiosqlite", "")
+        elif "asyncpg" in db_url:
+            db_url = db_url.replace("+asyncpg", "+psycopg2")
+
+        sync_engine = create_engine(db_url, echo=False)
+        from sqlalchemy.orm import Session
+        with Session(sync_engine) as session:
+            row = session.execute(
+                sa_select(AdminSettings).where(AdminSettings.id == 1)
+            ).scalar_one_or_none()
+            if row:
+                return (row.active_provider, row.active_model)
+        sync_engine.dispose()
+    except Exception as exc:
+        print(f"[AdminSettings SQL] Could not read preference: {exc}")
+
+    return ("auto", "")
+
+
+def _call_llm(prompt: str) -> str | None:
+    """Helper to query OpenAI or Gemini respecting admin-selected provider preference."""
+    admin_provider, admin_model = _get_admin_provider_preference()
+
+    def _try_openai(model_override: str = "") -> str | None:
+        if not settings.openai_api_key or settings.openai_api_key.startswith("your_"):
+            return None
+        try:
+            client = OpenAI(api_key=settings.openai_api_key)
+            model_name = model_override or settings.openai_model or "gpt-4.1-mini"
+            completion = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a principal database engineer and data analyst.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.0,
+            )
+            if completion.choices and completion.choices[0].message.content:
+                return completion.choices[0].message.content.strip()
+        except Exception as exc:
+            print(f"[OpenAI SQL Warning] Error: {str(exc)[:150]}")
         return None
 
-    client = genai.Client(api_key=settings.gemini_api_key)
-    # Deduplicate while preserving priority order
-    models_to_try = []
-    for m in CANDIDATE_MODELS:
-        if m and m not in models_to_try:
-            models_to_try.append(m)
+    def _try_gemini(model_override: str = "") -> str | None:
+        if not settings.gemini_api_key or settings.gemini_api_key.startswith("your_") or genai is None:
+            return None
+        client = genai.Client(api_key=settings.gemini_api_key)
+        models_to_try = []
+        if model_override:
+            models_to_try.append(model_override)
+        for m in CANDIDATE_MODELS:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
 
-    for model_name in models_to_try:
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-            )
-            if response and response.text:
-                return response.text.strip()
-        except Exception as exc:
-            # Continue to next model on failure/deprecation/rate-limit
-            continue
-    return None
+        for model_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    return response.text.strip()
+            except Exception:
+                continue
+        return None
+
+    # Dispatch based on admin preference
+    if admin_provider == "openai":
+        return _try_openai(admin_model) or _try_gemini()
+    elif admin_provider == "gemini":
+        return _try_gemini(admin_model) or _try_openai()
+    else:
+        # auto: try OpenAI first, then Gemini
+        return _try_openai() or _try_gemini()
+
+
+_call_gemini = _call_llm
+
+
+def get_active_ai_provider() -> dict[str, str]:
+    """Return the active AI provider and model name based on admin settings."""
+    admin_provider, admin_model = _get_admin_provider_preference()
+
+    if admin_provider == "openai" and settings.openai_api_key and not settings.openai_api_key.startswith("your_"):
+        return {"provider": "OpenAI", "model": admin_model or settings.openai_model or "gpt-4.1-mini"}
+    elif admin_provider == "gemini" and settings.gemini_api_key and not settings.gemini_api_key.startswith("your_"):
+        return {"provider": "Gemini", "model": admin_model or settings.gemini_model}
+    elif admin_provider == "auto":
+        if settings.openai_api_key and not settings.openai_api_key.startswith("your_"):
+            return {"provider": "OpenAI", "model": settings.openai_model or "gpt-4.1-mini"}
+        if settings.gemini_api_key and not settings.gemini_api_key.startswith("your_"):
+            return {"provider": "Gemini", "model": settings.gemini_model}
+    return {"provider": "Rule-Based", "model": "Deterministic Engine"}
 
 
 def _is_id_column(col_name: str) -> bool:
@@ -272,7 +361,9 @@ RULES:
     # Rule-based fallback explanation
     first_row = rows[0]
     items_summary = ", ".join([f"{k}: {v}" for k, v in list(first_row.items())[:3]])
+    total_ds_rows = result.get("total_dataset_rows", 0)
+    cov_str = f" computed over 100% of dataset ({total_ds_rows:,} records)" if total_ds_rows > 0 else ""
     return (
-        f"Query executed in {result.get('execution_time_ms', 0)}ms and returned {row_count} row(s). "
+        f"Query executed in {result.get('execution_time_ms', 0)}ms{cov_str} and returned {row_count} row(s). "
         f"Top result: ({items_summary})."
     )

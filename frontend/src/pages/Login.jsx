@@ -61,8 +61,13 @@ function Login() {
   const googleBtnContainerRef = useRef(null);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
-  // If already logged in, redirect to dashboard
+  // If already logged in, redirect to appropriate dashboard
   useEffect(() => {
+    const adminToken = localStorage.getItem("admin_token");
+    if (adminToken) {
+      navigate("/admin/dashboard", { replace: true });
+      return;
+    }
     const token = localStorage.getItem("access_token");
     if (token) {
       navigate("/dashboard", { replace: true });
@@ -161,22 +166,31 @@ function Login() {
         });
         navigate("/dashboard", { replace: true });
       } else {
-        // Fast non-blocking login
-        await loginUser({
+        // Fast non-blocking login with automatic admin detection
+        const res = await loginUser({
           email: email.trim(),
           password,
         });
-        navigate("/dashboard", { replace: true });
+        if (res.is_admin || res.admin_token) {
+          navigate("/admin/dashboard", { replace: true });
+        } else {
+          navigate("/dashboard", { replace: true });
+        }
       }
     } catch (err) {
       console.error("Auth error:", err);
+      let errMsg = "";
       const detail = err.response?.data?.detail;
-      setError(
-        detail ||
-          (isRegister
-            ? "Failed to create account. Please try again."
-            : "Invalid email or password.")
-      );
+      if (typeof detail === "string") {
+        errMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errMsg = detail.map((d) => (typeof d === "object" ? d.msg || d.type : String(d))).join(", ");
+      } else if (detail && typeof detail === "object") {
+        errMsg = detail.msg || detail.message || JSON.stringify(detail);
+      } else {
+        errMsg = err.message || (isRegister ? "Failed to create account. Please try again." : "Invalid email or password.");
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
@@ -361,12 +375,12 @@ function Login() {
             )}
 
             <div className="form-group">
-              <label className="eyebrow">EMAIL ADDRESS</label>
+              <label className="eyebrow">{isRegister ? "EMAIL ADDRESS" : "EMAIL ADDRESS / USERNAME"}</label>
               <div className="input-with-icon">
                 <Mail size={16} />
                 <input
-                  type="email"
-                  placeholder="name@company.com"
+                  type={isRegister ? "email" : "text"}
+                  placeholder={isRegister ? "name@company.com" : "name@company.com or admin"}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required

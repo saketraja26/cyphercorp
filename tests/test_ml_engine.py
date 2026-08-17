@@ -177,7 +177,7 @@ class TestMlEngine(unittest.TestCase):
 
         self.assertTrue(os.path.exists(result["model_file"]))
 
-        # Live real-time prediction
+        # Live real-time prediction with Local Feature Attribution
         pred = predict_sample(
             model_path=result["model_file"],
             input_data=result["sample_record"],
@@ -186,6 +186,23 @@ class TestMlEngine(unittest.TestCase):
         self.assertIn(pred["prediction"], ["Yes", "No"])
         self.assertIsNotNone(pred["probabilities"])
         self.assertIsNotNone(pred["confidence_pct"])
+        self.assertIn("feature_attributions", pred)
+        self.assertGreater(len(pred["feature_attributions"]), 0)
+
+        # Verify Feature Attribution & Model Diagnostics
+        self.assertIn("feature_attribution", result)
+        self.assertGreater(len(result["feature_attribution"]), 0)
+        top_attr = result["feature_attribution"][0]
+        self.assertIn("direction", top_attr)
+        self.assertIn("direction_label", top_attr)
+        self.assertIn("narrative", top_attr)
+
+        self.assertIn("model_diagnostics", result)
+        diag = result["model_diagnostics"]
+        self.assertIn("grade", diag)
+        self.assertIn("readiness", diag)
+        self.assertIn("executive_narrative", diag)
+        self.assertIn("class_metrics", diag)
 
         if os.path.exists(result["model_file"]):
             os.remove(result["model_file"])
@@ -212,9 +229,53 @@ class TestMlEngine(unittest.TestCase):
         )
         self.assertIsInstance(pred["prediction"], float)
         self.assertGreater(pred["prediction"], 0)
+        self.assertIn("feature_attributions", pred)
+
+        self.assertIn("model_diagnostics", result)
+        self.assertIn("executive_narrative", result["model_diagnostics"])
+        self.assertIn("over_prediction_pct", result["model_diagnostics"])
 
         if os.path.exists(result["model_file"]):
             os.remove(result["model_file"])
+
+    def test_large_dataset_automl_pipeline(self):
+        """Test AutoML pipeline stability on large datasets (>9,000 rows) with infinite values and high-cardinality."""
+        n_large = 9500
+        large_df = pd.DataFrame({
+            "id": list(range(n_large)),
+            "feat_num1": np.random.uniform(0, 100, size=n_large),
+            "feat_num2_noisy": [np.inf if i == 5 else (np.nan if i == 10 else float(i % 50)) for i in range(n_large)],
+            "feat_cat_high_card": [f"Category_{i % 50}" for i in range(n_large)],
+            "target_class": np.random.choice(["Class_A", "Class_B"], size=n_large, p=[0.8, 0.2]),
+        })
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w", newline="") as f:
+            large_df.to_csv(f.name, index=False)
+            large_csv = f.name
+
+        try:
+            candidates = get_target_candidates(large_csv)
+            self.assertEqual(candidates["recommended_target"], "target_class")
+
+            res = train_automl_pipeline(large_csv, target_column="target_class", dataset_id=99)
+            self.assertEqual(res["problem_type"], "classification")
+            self.assertGreater(len(res["leaderboard"]), 0)
+            self.assertIn("feature_attribution", res)
+            self.assertIn("model_diagnostics", res)
+
+            # Test inference on large trained model
+            pred = predict_sample(
+                model_path=res["model_file"],
+                input_data={"feat_num1": 55.0, "feat_num2_noisy": 12.0, "feat_cat_high_card": "Category_3"},
+            )
+            self.assertIn("prediction", pred)
+            self.assertIn("feature_attributions", pred)
+
+            if os.path.exists(res["model_file"]):
+                os.remove(res["model_file"])
+        finally:
+            if os.path.exists(large_csv):
+                os.remove(large_csv)
 
 
 if __name__ == "__main__":

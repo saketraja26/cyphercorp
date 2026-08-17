@@ -73,15 +73,23 @@ def get_dataset_schema(file_path: str) -> dict[str, Any]:
 def execute_sql_query(file_path: str, sql_query: str) -> dict[str, Any]:
     """
     Safely execute a validated SQL query against the CSV dataset.
-    Returns query execution metrics, column descriptors, and row records.
+    Scans 100% of the dataset records and returns query execution metrics,
+    column descriptors, and row records.
     """
     validated_sql = validate_sql(sql_query)
 
     df = pd.read_csv(file_path)
+    total_dataset_rows = len(df)
+
+    upper_sql = validated_sql.upper()
+    is_aggregate = any(
+        agg in upper_sql for agg in ("COUNT(", "SUM(", "AVG(", "MIN(", "MAX(", "GROUP BY")
+    )
 
     # Create isolated in-memory SQLite connection
     conn = sqlite3.connect(":memory:")
     try:
+        # Load full dataset into in-memory SQLite table
         df.to_sql("dataset", conn, if_exists="replace", index=False)
 
         start_time = time.perf_counter()
@@ -103,6 +111,9 @@ def execute_sql_query(file_path: str, sql_query: str) -> dict[str, Any]:
             "columns": column_names,
             "rows": formatted_rows,
             "row_count": len(formatted_rows),
+            "total_dataset_rows": total_dataset_rows,
+            "scanned_percentage": 100.0,
+            "is_aggregate": is_aggregate,
             "execution_time_ms": execution_time_ms,
         }
 

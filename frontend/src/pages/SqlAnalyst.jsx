@@ -13,6 +13,7 @@ import {
   Code2,
   Table as TableIcon,
   HelpCircle,
+  Zap,
 } from "lucide-react";
 
 import { getCachedDatasets, getDatasets, getDatasetSqlSchema, executeSqlQuery } from "../services/api";
@@ -298,8 +299,40 @@ function SqlAnalyst() {
       ========================= */}
       {queryResult && (
         <section className="sql-results-section">
-          {/* Metrics bar */}
-          <div className="result-metrics-bar">
+          {/* Accuracy & Dataset Coverage Metrics bar */}
+          <div className="result-metrics-bar" style={{ flexWrap: "wrap", gap: "12px" }}>
+            <div
+              className="metric-item"
+              style={{
+                background: "rgba(16, 185, 129, 0.12)",
+                padding: "6px 12px",
+                borderRadius: "4px",
+                border: "1px solid rgba(16, 185, 129, 0.25)",
+              }}
+            >
+              <ShieldCheck size={15} color="#10b981" />
+              <span style={{ color: "#10b981", fontWeight: 600 }}>
+                100% Dataset Scanned ({queryResult.total_dataset_rows ? queryResult.total_dataset_rows.toLocaleString() : "All"} rows)
+              </span>
+            </div>
+
+            {queryResult.is_aggregate && (
+              <div
+                className="metric-item"
+                style={{
+                  background: "rgba(59, 130, 246, 0.12)",
+                  padding: "6px 12px",
+                  borderRadius: "4px",
+                  border: "1px solid rgba(59, 130, 246, 0.25)",
+                }}
+              >
+                <Sparkles size={15} color="#3b82f6" />
+                <span style={{ color: "#3b82f6", fontWeight: 600 }}>
+                  Exact Mathematical Aggregation
+                </span>
+              </div>
+            )}
+
             <div className="metric-item">
               <Clock size={15} />
               <span>Execution: <strong>{queryResult.execution_time_ms} ms</strong></span>
@@ -312,6 +345,48 @@ function SqlAnalyst() {
               <TableIcon size={15} />
               <span>Columns: <strong>{queryResult.columns?.length || 0}</strong></span>
             </div>
+
+            {queryResult.ai_provider && (
+              <div
+                className="metric-item"
+                style={{
+                  background:
+                    queryResult.ai_provider.provider === "OpenAI" ||
+                    String(queryResult.ai_provider.model).includes("gpt")
+                      ? "rgba(16, 185, 129, 0.12)"
+                      : "rgba(168, 85, 247, 0.12)",
+                  padding: "6px 12px",
+                  borderRadius: "4px",
+                  border:
+                    queryResult.ai_provider.provider === "OpenAI" ||
+                    String(queryResult.ai_provider.model).includes("gpt")
+                      ? "1px solid rgba(16, 185, 129, 0.25)"
+                      : "1px solid rgba(168, 85, 247, 0.25)",
+                }}
+              >
+                <Zap
+                  size={14}
+                  color={
+                    queryResult.ai_provider.provider === "OpenAI" ||
+                    String(queryResult.ai_provider.model).includes("gpt")
+                      ? "#10b981"
+                      : "#a855f7"
+                  }
+                />
+                <span
+                  style={{
+                    color:
+                      queryResult.ai_provider.provider === "OpenAI" ||
+                      String(queryResult.ai_provider.model).includes("gpt")
+                        ? "#10b981"
+                        : "#a855f7",
+                    fontWeight: 600,
+                  }}
+                >
+                  {queryResult.ai_provider.provider}: {queryResult.ai_provider.model}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* AI Grounded Explanation */}

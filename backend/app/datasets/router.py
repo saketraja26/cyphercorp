@@ -1,6 +1,7 @@
 from datetime import datetime
 
 import csv
+import json
 import shutil
 from pathlib import Path
 
@@ -267,7 +268,7 @@ async def get_datasets(
 
     result = await db.execute(
         select(Dataset)
-        .options(defer(Dataset.csv_data))
+        .options(defer(Dataset.csv_data), defer(Dataset.ai_analysis_data))
         .where(Dataset.user_id == current_user.id)
         .order_by(Dataset.created_at.desc())
     )
@@ -500,6 +501,7 @@ async def get_dataset_insights(
 @router.get("/{dataset_id}/ai-analysis")
 async def get_dataset_ai_analysis(
     dataset_id: int,
+    regenerate: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -516,6 +518,19 @@ async def get_dataset_ai_analysis(
             detail="Dataset not found.",
         )
 
+    # Return cached analysis if present and not forced to regenerate
+    if dataset.ai_analysis_data and not regenerate:
+        try:
+            cached_data = json.loads(dataset.ai_analysis_data)
+            cached_data["cached"] = True
+            return {
+                "dataset_id": dataset.id,
+                "dataset_name": dataset.name,
+                "analysis": cached_data,
+            }
+        except Exception:
+            pass
+
     file_path = ensure_dataset_file(dataset)
 
     try:
@@ -527,6 +542,15 @@ async def get_dataset_ai_analysis(
         context = build_analysis_context(statistics, quality, insights, correlations)
         prompt = build_analysis_prompt(context)
         ai_analysis = ask_ai(prompt, context)
+        ai_analysis["cached"] = False
+
+        # Persist to database
+        try:
+            dataset.ai_analysis_data = json.dumps(ai_analysis)
+            await db.commit()
+            await db.refresh(dataset)
+        except Exception as db_save_err:
+            print(f"[Dataset AI Cache] Warning: could not persist ai_analysis_data: {db_save_err}")
 
         return {
             "dataset_id": dataset.id,
@@ -540,9 +564,25 @@ async def get_dataset_ai_analysis(
         )
 
 
+@router.post("/{dataset_id}/regenerate-ai-analysis")
+async def regenerate_dataset_ai_analysis(
+    dataset_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Force re-generation of AI executive analysis and persist updated report."""
+    return await get_dataset_ai_analysis(
+        dataset_id=dataset_id,
+        regenerate=True,
+        current_user=current_user,
+        db=db,
+    )
+
+
 @router.get("/{dataset_id}/analysis")
 async def get_dataset_analysis(
     dataset_id: int,
+    regenerate: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -570,17 +610,36 @@ async def get_dataset_analysis(
         correlations = visualizations.get("correlations", {})
         insights = generate_insights(statistics, quality, correlations)
 
-        # Build AI context and prompt
-        context = build_analysis_context(
-            statistics=statistics,
-            quality=quality,
-            insights=insights,
-            correlations=correlations,
-        )
-        prompt = build_analysis_prompt(context)
+        ai_analysis = None
+        # Check if cached AI report already exists in database
+        if dataset.ai_analysis_data and not regenerate:
+            try:
+                ai_analysis = json.loads(dataset.ai_analysis_data)
+                ai_analysis["cached"] = True
+            except Exception:
+                ai_analysis = None
 
-        # Safe non-fatal AI analysis
-        ai_analysis = ask_ai(prompt, context)
+        if ai_analysis is None:
+            # Build AI context and prompt
+            context = build_analysis_context(
+                statistics=statistics,
+                quality=quality,
+                insights=insights,
+                correlations=correlations,
+            )
+            prompt = build_analysis_prompt(context)
+
+            # Safe non-fatal AI analysis
+            ai_analysis = ask_ai(prompt, context)
+            ai_analysis["cached"] = False
+
+            # Persist to database so subsequent visits load instantly
+            try:
+                dataset.ai_analysis_data = json.dumps(ai_analysis)
+                await db.commit()
+                await db.refresh(dataset)
+            except Exception as db_save_err:
+                print(f"[Dataset AI Cache] Warning: could not persist ai_analysis_data: {db_save_err}")
 
         return {
             "dataset": {

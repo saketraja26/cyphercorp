@@ -62,6 +62,27 @@ UUID_REGEX = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA
 PREFIX_ID_REGEX = re.compile(r"^[a-zA-Z_\-]+[0-9]+$")
 
 
+# Free-form Text / PII / Non-predictive entity attributes
+TEXT_PII_PATTERNS = [
+    r"^(.*_)?(name|full_name|first_name|last_name|customer_name|client_name|patient_name|employee_name|person_name|user_name|username)$",
+    r"^(.*_)?(address|street|street_address|shipping_address|billing_address|address_line_1|address_line_2|zip_code|postal_code|postcode)$",
+    r"^(.*_)?(email|phone|telephone|mobile|fax|contact_number|ip_address|user_agent)$",
+    r"^(.*_)?(description|notes|comments|remarks|summary|text|message|review|feedback|url|website|image|photo|avatar)$",
+]
+
+
+def _is_text_pii_matched(col_name: str) -> bool:
+    """Check if a column name matches free-form text or personal entity attributes."""
+    col_str = str(col_name).strip()
+    camel_split = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", col_str).lower()
+    col_clean = re.sub(r"[^a-zA-Z0-9]", "_", camel_split).strip("_")
+
+    for pat in TEXT_PII_PATTERNS:
+        if re.match(pat, col_clean, re.IGNORECASE):
+            return True
+    return False
+
+
 def _is_name_matched_id(col_name: str) -> bool:
     """Check if a column name matches entity identifier conventions."""
     col_str = str(col_name).strip()
@@ -76,7 +97,7 @@ def _is_name_matched_id(col_name: str) -> bool:
     if col_clean in NON_ID_WORDS:
         return False
 
-    # Check for CamelCase split (e.g. CustomerID -> customer_id)
+    # Check for CamelCase split (e.g. CustomerID -> customer_id, OrderNumber -> order_number)
     camel_split = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", col_str).lower()
     camel_clean = re.sub(r"[^a-zA-Z0-9]", "_", camel_split).strip("_")
 
@@ -95,11 +116,12 @@ def analyze_column_identifier(
     series: pd.Series, col_name: str, total_rows: int
 ) -> dict[str, Any]:
     """
-    Perform deep identifier detection:
-    1. Checks name patterns against standard ID conventions (CustomerID, user_id, UUID, etc.).
-    2. Computes uniqueness ratio.
-    3. Detects sequential integer IDs and monotonic series.
-    4. Detects UUID and sequential prefix string patterns.
+    Perform deep identifier and non-predictive entity attribute detection:
+    1. Checks name patterns against standard ID conventions (CustomerID, OrderNumber, ProductID, user_id, UUID, etc.).
+    2. Checks for free-form text and PII (Name, Address, Email, Phone, Description, Notes).
+    3. Computes uniqueness ratio and cardinality.
+    4. Detects sequential integer IDs and monotonic series.
+    5. Detects UUID and sequential prefix string patterns (e.g. CUST004009, ORD0658581).
     """
     col_str = str(col_name).strip()
     col_clean = re.sub(r"[^a-zA-Z0-9]", "_", col_str).lower().strip("_")
@@ -119,6 +141,7 @@ def analyze_column_identifier(
 
     # 1. Check Name Patterns
     name_matched = _is_name_matched_id(col_str)
+    pii_matched = _is_text_pii_matched(col_str)
 
     # 2. Check Monotonicity & Sequential Integers
     is_sequential = False
@@ -136,46 +159,62 @@ def analyze_column_identifier(
 
     # 3. Check UUID or sequential prefix pattern for string series
     is_uuid_like = False
+    is_prefix_code = False
+    avg_str_len = 0.0
     if not is_numeric_dtype(clean_series) and len(clean_series) > 0:
         sample_vals = [str(v).strip() for v in clean_series.head(50)]
+        avg_str_len = float(np.mean([len(v) for v in sample_vals])) if sample_vals else 0.0
+
         uuid_matches = sum(1 for v in sample_vals if UUID_REGEX.match(v))
         if uuid_matches / len(sample_vals) > 0.8:
             is_uuid_like = True
         else:
             prefix_matches = sum(1 for v in sample_vals if PREFIX_ID_REGEX.match(v))
-            if prefix_matches / len(sample_vals) > 0.8:
-                is_uuid_like = True
+            if prefix_matches / len(sample_vals) > 0.7:
+                is_prefix_code = True
 
     # 4. Synthesize Identifier Confidence & Reason
     is_id = False
     confidence = 0.0
     reason = ""
 
-    # Rule A: Name matches ID pattern + high/moderate uniqueness (e.g. CustomerID, user_id, cust_id, AccountID)
-    if name_matched and (uniqueness_ratio >= 0.70 or (total_rows > 10 and uniqueness_ratio >= 0.30) or unique_count == total_rows):
+    # Rule A: Column name explicitly matches Entity ID convention with non-trivial unique values (>= 4 unique values)
+    if name_matched and (unique_count >= 4 or unique_count == total_rows):
         is_id = True
         confidence = 0.99
-        reason = f"Column name '{col_str}' indicates an entity identifier with {uniqueness_ratio * 100:.1f}% unique values ({unique_count:,}/{total_rows:,})."
+        reason = f"Column name '{col_str}' indicates an entity identifier ({unique_count:,} unique values across {total_rows:,} records)."
 
-    # Rule B: Strictly sequential monotonic integer sequence with step=1 in non-trivial dataset (>= 20 rows)
+    # Rule B: Column matches Free-form Text / PII attribute (Name, Address, Email, Phone, Description)
+    elif pii_matched and unique_count >= 3:
+        is_id = True
+        confidence = 0.95
+        reason = f"Column '{col_str}' contains personal entity / free-text attributes ({unique_count:,} unique values). Excluded from tabular training to prevent severe overfitting."
+
+    # Rule C: Strictly sequential monotonic integer sequence with step=1 in non-trivial dataset (>= 20 rows)
     elif is_sequential and total_rows >= 20 and uniqueness_ratio >= 0.90:
         is_id = True
         confidence = 0.99
         reason = f"Column contains a strictly sequential, monotonic integer series ({unique_count:,} unique values)."
 
-    # Rule C: UUID or prefix ID pattern with high cardinality (e.g. CUST_001, TX_101)
-    elif is_uuid_like and uniqueness_ratio >= 0.80:
+    # Rule D: Prefix ID / Code pattern (e.g. CUST004009, ORD0658581, BOOK100) with moderate-to-high cardinality
+    elif (is_uuid_like or is_prefix_code) and unique_count >= 10 and uniqueness_ratio >= 0.05:
         is_id = True
         confidence = 0.95
-        reason = f"Values match UUID / entity key format with {uniqueness_ratio * 100:.1f}% uniqueness."
+        reason = f"Values match entity key / code format ({unique_count:,} unique keys, e.g. '{clean_series.iloc[0]}')."
 
-    # Rule D: 100% unique string column in non-trivial dataset (> 20 rows)
+    # Rule E: High-cardinality long text strings (e.g. addresses, descriptions) (> 25 unique & avg len > 20)
+    elif not is_numeric_dtype(clean_series) and unique_count >= 25 and (avg_str_len >= 22 or uniqueness_ratio >= 0.90):
+        is_id = True
+        confidence = 0.90
+        reason = f"High-cardinality text / address column with {unique_count:,} distinct entries. Excluded to prevent noise in tabular models."
+
+    # Rule F: 100% unique string column in non-trivial dataset (> 20 rows)
     elif not is_numeric_dtype(clean_series) and total_rows >= 20 and uniqueness_ratio >= 0.98:
         is_id = True
         confidence = 0.85
-        reason = f"High-cardinality string column with {uniqueness_ratio * 100:.1f}% uniqueness ({unique_count:,}/{total_rows:,})."
+        reason = f"Unique string entity column with {uniqueness_ratio * 100:.1f}% uniqueness ({unique_count:,}/{total_rows:,})."
 
-    # Rule E: Exact ID keyword (id, pk, key, uuid, index, row_id, unnamed: 0)
+    # Rule G: Exact ID keyword (id, pk, key, uuid, index, row_id, unnamed: 0)
     elif col_clean in EXACT_ID_NAMES and unique_count > 1:
         is_id = True
         confidence = 0.95

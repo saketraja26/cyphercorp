@@ -116,6 +116,49 @@ def predict_sample(model_path: str, input_data: dict[str, Any]) -> dict[str, Any
             f"for '{artifact['target_column']}' based on the supplied parameters."
         )
 
+    # 5. Compute Local Prediction Feature Attribution (Waterfall Drivers)
+    local_attributions = []
+    for idx, fname in enumerate(feature_names):
+        val = vector[idx]
+        scaled_val = vector_scaled[0, idx]
+
+        is_dummy = "_" in fname and any(fname.startswith(f"{c}_") for c in cat_cols)
+        base_name = fname
+        if is_dummy:
+            for c in cat_cols:
+                if fname.startswith(f"{c}_"):
+                    base_name = c
+                    break
+
+        if hasattr(model, "coef_"):
+            coef_arr = model.coef_
+            c_weight = float(np.mean(coef_arr[:, idx])) if coef_arr.ndim > 1 else float(coef_arr[idx])
+            contrib = float(scaled_val * c_weight)
+        else:
+            imp = float(model.feature_importances_[idx]) if hasattr(model, "feature_importances_") else (1.0 / max(1, len(feature_names)))
+            contrib = float(scaled_val * imp * 10.0)
+
+        if abs(contrib) >= 0.005:
+            direction = "positive" if contrib > 0 else "negative"
+            sign_char = "+" if contrib > 0 else ""
+
+            raw_input_display = input_data.get(base_name, val)
+            if isinstance(raw_input_display, float):
+                display_v = f"{raw_input_display:,.2f}"
+            else:
+                display_v = str(raw_input_display)
+
+            local_attributions.append({
+                "feature": fname,
+                "base_feature": base_name,
+                "input_value": display_v,
+                "contribution": round(contrib, 3),
+                "direction": direction,
+                "impact_label": f"{sign_char}{contrib:.2f}",
+            })
+
+    local_attributions.sort(key=lambda x: abs(x["contribution"]), reverse=True)
+
     return {
         "prediction": prediction_val,
         "verdict": verdict,
@@ -125,4 +168,5 @@ def predict_sample(model_path: str, input_data: dict[str, Any]) -> dict[str, Any
         "problem_type": problem_type,
         "model_name": artifact["model_name"],
         "target_column": artifact["target_column"],
+        "feature_attributions": local_attributions[:8],
     }

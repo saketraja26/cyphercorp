@@ -106,6 +106,35 @@ class TestApiEndpoints(unittest.TestCase):
         self.assertTrue(verify_password(pwd, hashed))
         self.assertFalse(verify_password("WrongPassword", hashed))
 
+    def test_dataset_ai_analysis_caching_persistence(self):
+        import json
+        from app.models.dataset import Dataset
+
+        cached_ai = {
+            "status": "cached",
+            "summary": "Pre-computed executive summary of business metrics.",
+            "data_quality": "High health score (98/100).",
+            "key_findings": ["• Revenue grew consistently"],
+            "recommendations": ["• Deploy gradient boosting model"],
+            "raw_text": "SUMMARY:\nPre-computed executive summary.",
+        }
+
+        dataset = Dataset(
+            id=123,
+            name="test_cached_eda",
+            user_id=1,
+            row_count=100,
+            column_count=5,
+            file_path="uploads/1/test_cached.csv",
+            csv_data="col1,col2\n1,2\n3,4\n",
+            ai_analysis_data=json.dumps(cached_ai),
+        )
+
+        self.assertIsNotNone(dataset.ai_analysis_data)
+        parsed = json.loads(dataset.ai_analysis_data)
+        self.assertEqual(parsed["status"], "cached")
+        self.assertIn("summary", parsed)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -47,6 +47,11 @@ class Dataset(Base):
         nullable=True,
     )
 
+    ai_analysis_data: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

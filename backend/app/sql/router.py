@@ -14,6 +14,7 @@ from app.sql.sql_generator import (
     explain_query_result,
     generate_sql_from_nl,
     generate_suggested_questions,
+    get_active_ai_provider,
 )
 
 router = APIRouter(
@@ -127,6 +128,7 @@ async def execute_query_endpoint(
 
     # 3. Grounded Explanation
     explanation = explain_query_result(question, query_result["sql"], query_result)
+    ai_provider = get_active_ai_provider()
 
     return {
         "dataset_id": dataset.id,
@@ -136,7 +138,11 @@ async def execute_query_endpoint(
         "columns": query_result["columns"],
         "rows": query_result["rows"],
         "row_count": query_result["row_count"],
+        "total_dataset_rows": query_result.get("total_dataset_rows", 0),
+        "scanned_percentage": query_result.get("scanned_percentage", 100.0),
+        "is_aggregate": query_result.get("is_aggregate", False),
         "execution_time_ms": query_result["execution_time_ms"],
         "explanation": explanation,
         "suggested_questions": suggested,
+        "ai_provider": ai_provider,
     }

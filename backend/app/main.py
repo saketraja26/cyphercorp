@@ -10,11 +10,13 @@ from app.database.database import Base, engine
 # Import all models to register them on Base.metadata
 from app.models.user import User
 from app.models.dataset import Dataset
+from app.models.admin_settings import AdminSettings
 
 from app.auth.router import router as auth_router
 from app.datasets.router import router as datasets_router
 from app.sql.router import router as sql_router
 from app.ml.router import router as ml_router
+from app.admin.router import router as admin_router
 
 
 @asynccontextmanager
@@ -23,9 +25,13 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            # Auto-migrate: ensure csv_data column exists on datasets table
+            # Auto-migrate: ensure csv_data and ai_analysis_data columns exist on datasets table
             try:
                 await conn.execute(text("ALTER TABLE datasets ADD COLUMN IF NOT EXISTS csv_data TEXT;"))
+            except Exception:
+                pass
+            try:
+                await conn.execute(text("ALTER TABLE datasets ADD COLUMN IF NOT EXISTS ai_analysis_data TEXT;"))
             except Exception:
                 pass
         print("Database tables initialized successfully via Base.metadata.")
@@ -80,6 +86,7 @@ app.include_router(auth_router)
 app.include_router(datasets_router)
 app.include_router(sql_router)
 app.include_router(ml_router)
+app.include_router(admin_router)
 
 
 @app.get("/")

@@ -38,6 +38,30 @@ const MODEL_DESCRIPTIONS = {
       "AutoML automates data cleaning, zero-leakage preprocessing, categorical encoding, feature scaling, 3-fold cross-validation benchmarking, and champion model serialization.",
     strengths: "Fast end-to-end prototyping, unbiased model selection, leakage prevention, and instant real-time inference.",
   },
+  "HistGradient Boosting": {
+    family: "Histogram-Based Gradient Boosting",
+    description:
+      "Modern binning-based gradient boosting algorithm (LightGBM-style). Bins continuous values into integer histograms for extreme speed and accurate non-linear partitioning.",
+    strengths: "State-of-the-art accuracy on complex tabular datasets, robust to mixed features, and resistant to overfitting.",
+  },
+  "HistGradient Boosting Regressor": {
+    family: "Histogram-Based Gradient Boosting",
+    description:
+      "Modern LightGBM-style histogram boosting algorithm that builds deep non-linear regression ensembles with native L2 regularization.",
+    strengths: "Exceptional precision on continuous financial and quantitative targets, fast computation, and smooth interaction modeling.",
+  },
+  "Extra Trees Classifier": {
+    family: "Extremely Randomized Trees",
+    description:
+      "Fits randomized decision trees on various sub-samples of the dataset with randomized cut-points to achieve lower variance and higher generalization.",
+    strengths: "Reduces overfitting, faster training than standard Random Forest, and captures intricate feature interactions.",
+  },
+  "Extra Trees Regressor": {
+    family: "Extremely Randomized Trees",
+    description:
+      "Constructs deeply randomized regression trees with randomized decision boundaries for superior variance reduction and smooth continuous interpolation.",
+    strengths: "Excellent interpolation accuracy, low prediction variance, and high resistance to noisy measurements.",
+  },
   "Random Forest Classifier": {
     family: "Ensemble Bagging",
     description:
@@ -973,35 +997,290 @@ function MlStudio() {
             </div>
           </div>
 
-          {/* Feature Importance */}
-          {mlResult.feature_importance?.length > 0 && (
-            <div className="ml-card">
+          {/* ========================================================
+              MODEL EXPLAINABILITY & DIAGNOSTICS
+              ======================================================== */}
+          {mlResult.model_diagnostics && (
+            <div className="ml-card explainability-card">
               <div className="section-heading">
                 <div>
-                  <p className="eyebrow">EXPLAINABILITY</p>
-                  <h2>Feature Importance Ranking</h2>
+                  <p className="eyebrow">MODEL EXPLAINABILITY & DIAGNOSTICS</p>
+                  <h2>Executive Model Decision Logic</h2>
                 </div>
-                <BarChart2 size={22} />
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      padding: "4px 10px",
+                      borderRadius: "4px",
+                      background: "rgba(16, 185, 129, 0.15)",
+                      color: "#10b981",
+                      border: "1px solid rgba(16, 185, 129, 0.3)",
+                    }}
+                  >
+                    Grade: {mlResult.model_diagnostics.grade}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      padding: "4px 10px",
+                      borderRadius: "4px",
+                      background: "rgba(59, 130, 246, 0.15)",
+                      color: "#3b82f6",
+                      border: "1px solid rgba(59, 130, 246, 0.3)",
+                    }}
+                  >
+                    {mlResult.model_diagnostics.readiness}
+                  </span>
+                </div>
               </div>
 
-              <div className="importance-bars-container">
-                {mlResult.feature_importance.map((f, idx) => (
-                  <div className="importance-row" key={idx}>
-                    <div className="importance-header">
-                      <span>{f.feature}</span>
-                      <strong>{f.importance}%</strong>
-                    </div>
-                    <div className="viz-bar-track">
-                      <div
-                        className="viz-bar-fill"
-                        style={{ width: `${Math.max(4, f.importance)}%` }}
-                      />
+              {/* Executive Summary Narrative */}
+              <div
+                style={{
+                  padding: "14px 18px",
+                  borderRadius: "6px",
+                  background: "var(--surface-alt)",
+                  border: "1px solid var(--border)",
+                  marginBottom: "18px",
+                  lineHeight: "1.6",
+                }}
+              >
+                <p style={{ margin: 0, fontSize: "14px", color: "var(--text)" }}>
+                  {mlResult.model_diagnostics.executive_narrative}
+                </p>
+              </div>
+
+              {/* Class-level breakdown or Regression error distribution */}
+              {mlResult.problem_type === "classification" &&
+                mlResult.model_diagnostics.class_metrics?.length > 0 && (
+                  <div style={{ marginBottom: "20px" }}>
+                    <p className="eyebrow" style={{ marginBottom: "8px" }}>
+                      CLASS-BY-CLASS RECOVERY & PRECISION MATRIX
+                    </p>
+                    <div className="table-scroll-wrapper">
+                      <table className="sql-table" style={{ fontSize: "13px" }}>
+                        <thead>
+                          <tr>
+                            <th>Outcome Class</th>
+                            <th>Precision (%)</th>
+                            <th>Recall / Sensitivity (%)</th>
+                            <th>Test Samples</th>
+                            <th>Accuracy Indicator</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mlResult.model_diagnostics.class_metrics.map((cm) => (
+                            <tr key={cm.class_name}>
+                              <td>
+                                <strong>{cm.class_name}</strong>
+                              </td>
+                              <td className="mono">{cm.precision_pct}%</td>
+                              <td className="mono">{cm.recall_pct}%</td>
+                              <td className="mono">{cm.support}</td>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <div className="viz-bar-track" style={{ width: "120px", height: "6px" }}>
+                                    <div
+                                      className="viz-bar-fill highlight"
+                                      style={{ width: `${Math.max(6, cm.recall_pct)}%` }}
+                                    />
+                                  </div>
+                                  <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                                    {cm.recall_pct >= 80 ? "High" : cm.recall_pct >= 50 ? "Moderate" : "Low"}
+                                  </span>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+
+              {mlResult.problem_type === "regression" && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: "14px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderRadius: "6px",
+                      background: "var(--surface-alt)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <span className="eyebrow">MEAN ABSOLUTE % ERROR (MAPE)</span>
+                    <strong style={{ fontSize: "18px", display: "block", marginTop: "4px" }}>
+                      {mlResult.model_diagnostics.mape_pct !== null
+                        ? `${mlResult.model_diagnostics.mape_pct}%`
+                        : "N/A"}
+                    </strong>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderRadius: "6px",
+                      background: "var(--surface-alt)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <span className="eyebrow">ERROR RESIDUAL DISTRIBUTION</span>
+                    <div style={{ marginTop: "4px", fontSize: "13px" }}>
+                      <span>Over: {mlResult.model_diagnostics.over_prediction_pct}%</span>
+                      <span style={{ margin: "0 6px" }}>•</span>
+                      <span>Under: {mlResult.model_diagnostics.under_prediction_pct}%</span>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderRadius: "6px",
+                      background: "var(--surface-alt)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <span className="eyebrow">MAX RESIDUAL ERROR</span>
+                    <strong style={{ fontSize: "18px", display: "block", marginTop: "4px" }}>
+                      {mlResult.model_diagnostics.max_residual_error}
+                    </strong>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+          {/* ========================================================
+              FEATURE ATTRIBUTION & DIRECTIONALITY
+              ======================================================== */}
+          {(() => {
+            const rankedFeatures = (mlResult.feature_attribution || mlResult.feature_importance || []).filter(
+              (f) => Number(f.importance || 0) > 0
+            );
+
+            if (rankedFeatures.length === 0) return null;
+
+            return (
+              <div className="ml-card">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">FEATURE ATTRIBUTION & IMPACT POLARITY</p>
+                    <h2>Directional Feature Influence</h2>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "12px", color: "var(--muted)", fontWeight: 500 }}>
+                      {rankedFeatures.length} features ranked
+                    </span>
+                    <BarChart2 size={20} />
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "12px",
+                    maxHeight: "380px",
+                    overflowY: "auto",
+                    paddingRight: "8px",
+                  }}
+                  className="table-scroll-wrapper"
+                >
+                  {rankedFeatures.map((f, idx) => {
+                    const isPositive = f.direction === "positive";
+                    const isNegative = f.direction === "negative";
+                    const badgeBg = isPositive
+                      ? "rgba(16, 185, 129, 0.12)"
+                      : isNegative
+                        ? "rgba(245, 158, 11, 0.12)"
+                        : "rgba(59, 130, 246, 0.12)";
+                    const badgeColor = isPositive ? "#10b981" : isNegative ? "#f59e0b" : "#3b82f6";
+                    const badgeBorder = isPositive
+                      ? "rgba(16, 185, 129, 0.3)"
+                      : isNegative
+                        ? "rgba(245, 158, 11, 0.3)"
+                        : "rgba(59, 130, 246, 0.3)";
+
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: "14px 16px",
+                          background: "var(--surface-alt)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ fontWeight: 600, fontSize: "14px", color: "var(--text)" }}>
+                              {f.feature}
+                            </span>
+                            {f.direction_label && (
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  background: badgeBg,
+                                  color: badgeColor,
+                                  border: `1px solid ${badgeBorder}`,
+                                }}
+                              >
+                                {f.direction_label}
+                              </span>
+                            )}
+                            {f.correlation !== undefined && f.correlation !== null && (
+                              <span className="mono" style={{ fontSize: "11px", color: "var(--muted)" }}>
+                                (r = {f.correlation > 0 ? `+${f.correlation}` : f.correlation})
+                              </span>
+                            )}
+                          </div>
+                          <strong className="mono" style={{ fontSize: "14px" }}>
+                            {f.importance}% Importance
+                          </strong>
+                        </div>
+
+                        <div className="viz-bar-track" style={{ marginBottom: "8px" }}>
+                          <div
+                            className="viz-bar-fill"
+                            style={{
+                              width: `${Math.max(4, f.importance)}%`,
+                              background: isPositive ? "#10b981" : isNegative ? "#f59e0b" : "var(--text)",
+                            }}
+                          />
+                        </div>
+
+                        {f.narrative && (
+                          <p style={{ margin: 0, fontSize: "12px", color: "var(--muted)", lineHeight: "1.5" }}>
+                            {f.narrative}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ========================================================
               LIVE PREDICTOR SANDBOX
@@ -1158,6 +1437,104 @@ function MlStudio() {
                   )}
                 </div>
 
+                {/* Local Feature Attribution / Prediction Drivers */}
+                {predictionResult.feature_attributions?.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: "16px",
+                      padding: "16px",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      <span className="eyebrow" style={{ margin: 0 }}>
+                        LOCAL PREDICTION DRIVERS (WHY THIS OUTCOME WAS GENERATED)
+                      </span>
+                      <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                        Per-record feature attribution breakdown
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                        gap: "10px",
+                      }}
+                    >
+                      {predictionResult.feature_attributions.map((attr, i) => {
+                        const isPos = attr.direction === "positive";
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              padding: "10px 12px",
+                              background: "var(--surface-alt)",
+                              border: "1px solid var(--border)",
+                              borderRadius: "4px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "12px",
+                                  fontWeight: 600,
+                                  color: "var(--text)",
+                                  maxWidth: "130px",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                                title={attr.feature}
+                              >
+                                {attr.base_feature || attr.feature}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  padding: "2px 6px",
+                                  borderRadius: "3px",
+                                  background: isPos
+                                    ? "rgba(16, 185, 129, 0.15)"
+                                    : "rgba(245, 158, 11, 0.15)",
+                                  color: isPos ? "#10b981" : "#f59e0b",
+                                  border: isPos
+                                    ? "1px solid rgba(16, 185, 129, 0.3)"
+                                    : "1px solid rgba(245, 158, 11, 0.3)",
+                                }}
+                              >
+                                {attr.impact_label}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                              Input value: <strong style={{ color: "var(--text)" }}>{attr.input_value}</strong>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Probability Distribution */}
                 {predictionResult.probabilities && (
                   <div className="class-probs-container">
@@ -1166,11 +1543,10 @@ function MlStudio() {
                       {Object.entries(predictionResult.probabilities).map(
                         ([cls, prob]) => (
                           <div
-                            className={`prob-item ${
-                              String(cls) === String(predictionResult.prediction)
+                            className={`prob-item ${String(cls) === String(predictionResult.prediction)
                                 ? "winner-prob"
                                 : ""
-                            }`}
+                              }`}
                             key={cls}
                           >
                             <div className="prob-label">
@@ -1181,11 +1557,10 @@ function MlStudio() {
                             </div>
                             <div className="viz-bar-track">
                               <div
-                                className={`viz-bar-fill ${
-                                  String(cls) === String(predictionResult.prediction)
+                                className={`viz-bar-fill ${String(cls) === String(predictionResult.prediction)
                                     ? "highlight"
                                     : ""
-                                }`}
+                                  }`}
                                 style={{ width: `${Math.max(4, prob * 100)}%` }}
                               />
                             </div>

@@ -6,6 +6,11 @@ try:
 except (ImportError, AttributeError):
     genai = None
 
+try:
+    from openai import OpenAI
+except (ImportError, AttributeError):
+    OpenAI = None
+
 from app.config import settings
 
 FALLBACK_MODELS = [
@@ -167,46 +172,122 @@ def generate_fallback_analysis(context: dict[str, Any], reason: str = "") -> dic
     }
 
 
+def _get_admin_provider_preference() -> tuple[str, str]:
+    """
+    Synchronously read the admin-configured provider/model from the DB.
+    Returns (active_provider, active_model). Defaults to ("auto", "").
+    """
+    try:
+        from sqlalchemy import create_engine, select as sa_select, text
+        from app.config import settings as app_settings
+        from app.models.admin_settings import AdminSettings
+
+        # Build a synchronous engine for this quick read
+        db_url = app_settings.database_url
+        if "aiosqlite" in db_url:
+            db_url = db_url.replace("+aiosqlite", "")
+        elif "asyncpg" in db_url:
+            db_url = db_url.replace("+asyncpg", "+psycopg2")
+
+        sync_engine = create_engine(db_url, echo=False)
+        from sqlalchemy.orm import Session
+        with Session(sync_engine) as session:
+            row = session.execute(
+                sa_select(AdminSettings).where(AdminSettings.id == 1)
+            ).scalar_one_or_none()
+            if row:
+                return (row.active_provider, row.active_model)
+        sync_engine.dispose()
+    except Exception as exc:
+        print(f"[AdminSettings] Could not read preference: {exc}")
+
+    return ("auto", "")
+
+
 def ask_ai(prompt: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
     """
-    Call Gemini LLM with model fallback and non-fatal error handling.
-    Returns structured analysis dict.
+    Execute LLM analysis respecting admin-selected provider preference.
+    Provider priority: admin setting > auto (OpenAI → Gemini) > rule-based fallback.
     """
-    if not settings.gemini_api_key or settings.gemini_api_key.startswith("your_"):
-        return generate_fallback_analysis(context or {}, "Missing API Key")
-
-    if genai is None:
-        return generate_fallback_analysis(context or {}, "google.genai SDK not installed in active environment")
-
-    client = genai.Client(api_key=settings.gemini_api_key)
-
-    candidate_models = [settings.gemini_model] + [
-        m for m in FALLBACK_MODELS if m != settings.gemini_model
-    ]
-
     last_error = ""
+    admin_provider, admin_model = _get_admin_provider_preference()
 
-    for model_name in candidate_models:
+    def _try_openai(model_override: str = "") -> dict[str, Any] | None:
+        if not settings.openai_api_key or settings.openai_api_key.startswith("your_"):
+            return None
         try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
+            client = OpenAI(api_key=settings.openai_api_key)
+            model_to_use = model_override or settings.openai_model or "gpt-4.1-mini"
+            completion = client.chat.completions.create(
+                model=model_to_use,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert principal data scientist and automated EDA analyst.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
             )
-
-            if response and response.text:
-                parsed = _parse_ai_sections(response.text)
+            if completion.choices and completion.choices[0].message.content:
+                parsed = _parse_ai_sections(completion.choices[0].message.content)
                 parsed["status"] = "success"
-                parsed["model_used"] = model_name
+                parsed["model_used"] = model_to_use
+                parsed["provider"] = "openai"
                 return parsed
-
         except Exception as exc:
-            err_str = str(exc)
-            last_error = err_str
-            print(f"[Gemini Warning] Model {model_name} failed: {err_str[:150]}")
-            # If 429 or NOT_FOUND, try next candidate model
-            continue
+            nonlocal last_error
+            last_error = f"OpenAI error: {str(exc)}"
+            print(f"[OpenAI Warning] Failed: {last_error[:150]}")
+        return None
 
-    # If all models exhausted or failed, return graceful fallback
-    print(f"[Gemini Non-Fatal Fallback] All models failed. Last error: {last_error[:150]}")
-    fallback = generate_fallback_analysis(context or {}, last_error)
-    return fallback
+    def _try_gemini(model_override: str = "") -> dict[str, Any] | None:
+        if not settings.gemini_api_key or settings.gemini_api_key.startswith("your_") or genai is None:
+            return None
+        client = genai.Client(api_key=settings.gemini_api_key)
+        candidate_models = []
+        if model_override:
+            candidate_models.append(model_override)
+        candidate_models.append(settings.gemini_model)
+        candidate_models.extend(m for m in FALLBACK_MODELS if m != settings.gemini_model)
+
+        for model_name in candidate_models:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                )
+                if response and response.text:
+                    parsed = _parse_ai_sections(response.text)
+                    parsed["status"] = "success"
+                    parsed["model_used"] = model_name
+                    parsed["provider"] = "gemini"
+                    return parsed
+            except Exception as exc:
+                nonlocal last_error
+                last_error = f"Gemini error: {str(exc)}"
+                print(f"[Gemini Warning] Model {model_name} failed: {str(exc)[:150]}")
+                continue
+        return None
+
+    # Dispatch based on admin preference
+    if admin_provider == "openai":
+        result = _try_openai(admin_model)
+        if result:
+            return result
+    elif admin_provider == "gemini":
+        result = _try_gemini(admin_model)
+        if result:
+            return result
+    else:
+        # auto mode: try OpenAI first, then Gemini
+        result = _try_openai(admin_model if admin_model and "gpt" in admin_model.lower() else "")
+        if result:
+            return result
+        result = _try_gemini(admin_model if admin_model and "gemini" in admin_model.lower() else "")
+        if result:
+            return result
+
+    # Graceful Rule-Based Fallback
+    print(f"[AI Non-Fatal Fallback] Returning deterministic summary. Last error: {last_error[:150]}")
+    return generate_fallback_analysis(context or {}, last_error)

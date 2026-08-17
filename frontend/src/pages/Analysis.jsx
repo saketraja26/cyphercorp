@@ -15,11 +15,22 @@ import {
   TrendingDown,
   Database,
   Upload,
+  RotateCcw,
+  Zap,
 } from "lucide-react";
 
-import { getDatasetAnalysis, getCachedDatasets, getDatasets, uploadDataset } from "../services/api";
+import {
+  getDatasetAnalysis,
+  regenerateDatasetAiAnalysis,
+  getCachedDatasets,
+  getDatasets,
+  uploadDataset,
+} from "../services/api";
 import CorrelationHeatmap from "../components/CorrelationHeatmap";
 import SEOHead from "../components/SEOHead";
+
+// Client-side in-memory cache to guarantee 0ms instant dataset switching
+const datasetAnalysisCache = new Map();
 
 function formatStatValue(val, colName = "", metricType = "") {
   if (val === null || val === undefined) return "—";
@@ -154,6 +165,7 @@ function Analysis() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [regeneratingAi, setRegeneratingAi] = useState(false);
   const [vizFilterTab, setVizFilterTab] = useState("all");
   const [corrViewMode, setCorrViewMode] = useState("both"); // "both", "heatmap", "cards"
 
@@ -200,7 +212,7 @@ function Analysis() {
     };
   }, [activeParamId, navigate]);
 
-  // 2. Fetch analysis for selected dataset
+  // 2. Fetch analysis for selected dataset (with instant cache support)
   useEffect(() => {
     const targetId = activeParamId || selectedDatasetId;
     if (!targetId) {
@@ -211,6 +223,13 @@ function Analysis() {
     let isMounted = true;
 
     const loadAnalysis = async () => {
+      // Instant cache hit: render immediately without spinner
+      if (datasetAnalysisCache.has(String(targetId))) {
+        setAnalysis(datasetAnalysisCache.get(String(targetId)));
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError("");
@@ -218,6 +237,7 @@ function Analysis() {
 
         const data = await getDatasetAnalysis(targetId);
         if (!isMounted) return;
+        datasetAnalysisCache.set(String(targetId), data);
         setAnalysis(data);
       } catch (err) {
         console.error("Failed to load dataset analysis:", err);
@@ -238,6 +258,31 @@ function Analysis() {
       isMounted = false;
     };
   }, [activeParamId, selectedDatasetId]);
+
+  const handleRegenerateAi = async () => {
+    const targetId = activeParamId || selectedDatasetId;
+    if (!targetId || regeneratingAi) return;
+
+    try {
+      setRegeneratingAi(true);
+      const res = await regenerateDatasetAiAnalysis(targetId);
+      if (res?.analysis) {
+        setAnalysis((prev) => {
+          if (!prev) return prev;
+          const updated = {
+            ...prev,
+            ai_analysis: res.analysis,
+          };
+          datasetAnalysisCache.set(String(targetId), updated);
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to regenerate AI analysis:", err);
+    } finally {
+      setRegeneratingAi(false);
+    }
+  };
 
   const handleDatasetChange = (newId) => {
     if (!newId) return;
@@ -534,10 +579,48 @@ function Analysis() {
         <section className="analysis-section">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">AI DATA SCIENTIST</p>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", flexWrap: "wrap" }}>
+                <p className="eyebrow" style={{ margin: 0 }}>AI DATA SCIENTIST</p>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    padding: "2px 8px",
+                    borderRadius: "4px",
+                    background: "rgba(16, 185, 129, 0.12)",
+                    color: "#10b981",
+                    border: "1px solid rgba(16, 185, 129, 0.25)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <Zap size={11} />
+                  {aiAnalysis?.cached !== false ? "Cached Report" : "Live Generated"}
+                </span>
+              </div>
               <h2>LLM Interpretation</h2>
             </div>
-            <Sparkles size={22} />
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <button
+                className="secondary-button"
+                style={{
+                  fontSize: "12px",
+                  padding: "6px 14px",
+                  height: "auto",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+                onClick={handleRegenerateAi}
+                disabled={regeneratingAi}
+                title="Re-run AI model interpretation on this dataset"
+              >
+                <RotateCcw size={13} className={regeneratingAi ? "spin" : ""} />
+                {regeneratingAi ? "Analyzing..." : "Regenerate Analysis"}
+              </button>
+              <Sparkles size={22} />
+            </div>
           </div>
 
           <div className="ai-interpretation-card">

@@ -21,13 +21,15 @@ class UserResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    is_admin: bool = False
+    admin_token: str | None = None
     user: UserResponse | None = None
 
 
@@ -41,4 +43,4 @@ class ChangePasswordRequest(BaseModel):
 
 
 class GoogleLoginRequest(BaseModel):
-    credential: str
+    credential: str

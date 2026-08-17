@@ -59,13 +59,17 @@ code {
 
 .sidebar {
   width: 240px;
-  min-height: 100vh;
+  height: 100vh;
+  position: sticky;
+  top: 0;
   padding: 28px 18px 20px;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   background: #f1f0eb;
   flex-shrink: 0;
+  overflow-y: auto;
+  z-index: 100;
 }
 
 .sidebar-header-row {
@@ -2181,7 +2185,11 @@ code {
 @media (max-width: 900px) {
   .sidebar {
     width: 65px;
+    height: 100vh;
+    position: sticky;
+    top: 0;
     padding: 20px 8px;
+    overflow-y: auto;
   }
 
   .brand span,
@@ -7128,6 +7136,48 @@ code {
   border: 1px solid #2d323f;
 }
 
+.landing-footer-socials {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.landing-social-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #1b1e26;
+  border: 1px solid #2d323f;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.landing-social-btn:hover {
+  background: #242834;
+  border-color: #3b4254;
+  color: #ffffff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.landing-social-btn.linkedin:hover {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(14, 118, 168, 0.12);
+}
+
+.landing-social-btn.github:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .landing-footer-nav-col h4 {
   font-size: 14px;
   font-weight: 700;
@@ -7154,6 +7204,21 @@ code {
 }
 
 .landing-footer-nav-col a:hover {
+  color: var(--accent);
+}
+
+.footer-link-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-link-with-icon svg {
+  color: #94a3b8;
+  transition: color 0.15s ease;
+}
+
+.footer-link-with-icon:hover svg {
   color: var(--accent);
 }
 
