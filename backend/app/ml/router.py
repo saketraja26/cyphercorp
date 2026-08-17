@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import defer
 
 from app.auth.dependencies import get_current_user
 from app.database.database import get_db
@@ -27,11 +26,13 @@ class TrainModelRequest(BaseModel):
     target_column: str
     excluded_features: list[str] | None = None
     included_features: list[str] | None = None
+    selected_algorithm: str | None = None
 
 
 class PredictRequest(BaseModel):
     model_file: str
     features: dict[str, Any]
+    selected_model_name: str | None = None
 
 
 @router.get("/{dataset_id}/ml/targets")
@@ -41,9 +42,7 @@ async def get_ml_target_candidates(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Dataset)
-        .options(defer(Dataset.csv_data))
-        .where(
+        select(Dataset).where(
             Dataset.id == dataset_id,
             Dataset.user_id == current_user.id,
         )
@@ -82,9 +81,7 @@ async def get_dataset_benchmark(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Dataset)
-        .options(defer(Dataset.csv_data))
-        .where(
+        select(Dataset).where(
             Dataset.id == dataset_id,
             Dataset.user_id == current_user.id,
         )
@@ -115,9 +112,7 @@ async def train_dataset_models(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Dataset)
-        .options(defer(Dataset.csv_data))
-        .where(
+        select(Dataset).where(
             Dataset.id == dataset_id,
             Dataset.user_id == current_user.id,
         )

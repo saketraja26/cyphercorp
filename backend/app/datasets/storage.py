@@ -14,6 +14,8 @@ def get_upload_dir() -> Path:
     return upload_dir
 
 
+from sqlalchemy import inspect
+
 def ensure_dataset_file(dataset: Dataset) -> Path:
     """
     Ensure the dataset CSV file is available on local disk.
@@ -38,12 +40,23 @@ def ensure_dataset_file(dataset: Dataset) -> Path:
         if alt.is_file():
             return alt
 
-    # 3. Re-hydrate from DB `csv_data` if available
-    if getattr(dataset, "csv_data", None):
+    # 3. Safely check and extract `csv_data` without triggering async greenlet lazy-load
+    csv_content = None
+    try:
+        insp = inspect(dataset)
+        if "csv_data" not in insp.unloaded:
+            csv_content = dataset.csv_data
+    except Exception:
+        try:
+            csv_content = getattr(dataset, "csv_data", None)
+        except Exception:
+            csv_content = None
+
+    if csv_content:
         target_path = upload_base / str(dataset.user_id) / primary_path.name
         target_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            target_path.write_text(dataset.csv_data, encoding="utf-8-sig")
+            target_path.write_text(csv_content, encoding="utf-8-sig")
             return target_path
         except Exception as exc:
             raise HTTPException(
