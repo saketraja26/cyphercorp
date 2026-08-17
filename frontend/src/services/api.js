@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000",
-  timeout: 75000, // 75 seconds to comfortably accommodate free-tier cloud cold starts
+  timeout: 180000, // 180 seconds to comfortably accommodate free-tier cloud cold starts & data processing
 });
 
 api.interceptors.request.use(
@@ -266,16 +266,23 @@ export const getDatasetMlTargets = async (datasetId) => {
 
 export const trainAutoMl = async (
   datasetId,
-  { target_column, excluded_features, included_features }
+  { target_column, excluded_features, included_features, selected_algorithm }
 ) => {
   if (!datasetId) {
     throw new Error("Dataset ID is missing");
   }
-  const response = await api.post(`/datasets/${datasetId}/ml/train`, {
-    target_column,
-    excluded_features,
-    included_features,
-  });
+  const response = await api.post(
+    `/datasets/${datasetId}/ml/train`,
+    {
+      target_column,
+      excluded_features,
+      included_features,
+      selected_algorithm,
+    },
+    {
+      timeout: 300000, // 5 minutes dedicated timeout for ML model benchmarking on cloud
+    }
+  );
   return response.data;
 };
 
@@ -287,14 +294,24 @@ export const getDatasetBenchmark = async (datasetId) => {
   return response.data;
 };
 
-export const predictAutoMl = async (datasetId, { model_file, features }) => {
+export const predictAutoMl = async (
+  datasetId,
+  { model_file, features, selected_model_name }
+) => {
   if (!datasetId) {
     throw new Error("Dataset ID is missing");
   }
-  const response = await api.post(`/datasets/${datasetId}/ml/predict`, {
-    model_file,
-    features,
-  });
+  const response = await api.post(
+    `/datasets/${datasetId}/ml/predict`,
+    {
+      model_file,
+      features,
+      selected_model_name,
+    },
+    {
+      timeout: 60000,
+    }
+  );
   return response.data;
 };
 

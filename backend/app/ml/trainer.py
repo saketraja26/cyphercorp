@@ -40,21 +40,21 @@ def _get_candidate_models(problem_type: str) -> dict[str, Any]:
     """Return dictionary of candidate models tailored to the problem type with high-precision hyperparameter tuning."""
     if problem_type == "classification":
         return {
-            "HistGradient Boosting": HistGradientBoostingClassifier(max_iter=150, max_depth=8, min_samples_leaf=5, l2_regularization=0.05, random_state=42),
-            "Random Forest Classifier": RandomForestClassifier(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
-            "Extra Trees Classifier": ExtraTreesClassifier(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
-            "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, max_depth=5, learning_rate=0.08, subsample=0.85, random_state=42),
-            "Logistic Regression": LogisticRegression(max_iter=500, tol=1e-3, solver="lbfgs", random_state=42),
+            "HistGradient Boosting": HistGradientBoostingClassifier(max_iter=80, max_depth=8, min_samples_leaf=5, l2_regularization=0.05, random_state=42),
+            "Random Forest Classifier": RandomForestClassifier(n_estimators=50, max_depth=12, min_samples_leaf=2, n_jobs=1, random_state=42),
+            "Extra Trees Classifier": ExtraTreesClassifier(n_estimators=50, max_depth=12, min_samples_leaf=2, n_jobs=1, random_state=42),
+            "Gradient Boosting": GradientBoostingClassifier(n_estimators=50, max_depth=4, learning_rate=0.1, subsample=0.85, random_state=42),
+            "Logistic Regression": LogisticRegression(max_iter=300, tol=1e-3, solver="lbfgs", random_state=42),
             "Decision Tree": DecisionTreeClassifier(max_depth=8, min_samples_leaf=2, random_state=42),
         }
     else:
         return {
-            "HistGradient Boosting Regressor": HistGradientBoostingRegressor(max_iter=150, max_depth=8, min_samples_leaf=5, l2_regularization=0.05, random_state=42),
-            "Random Forest Regressor": RandomForestRegressor(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
-            "Extra Trees Regressor": ExtraTreesRegressor(n_estimators=100, max_depth=15, min_samples_leaf=2, n_jobs=-1, random_state=42),
-            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=100, max_depth=5, learning_rate=0.08, subsample=0.85, random_state=42),
+            "HistGradient Boosting Regressor": HistGradientBoostingRegressor(max_iter=80, max_depth=8, min_samples_leaf=5, l2_regularization=0.05, random_state=42),
+            "Random Forest Regressor": RandomForestRegressor(n_estimators=50, max_depth=12, min_samples_leaf=2, n_jobs=1, random_state=42),
+            "Extra Trees Regressor": ExtraTreesRegressor(n_estimators=50, max_depth=12, min_samples_leaf=2, n_jobs=1, random_state=42),
+            "Gradient Boosting Regressor": GradientBoostingRegressor(n_estimators=50, max_depth=4, learning_rate=0.1, subsample=0.85, random_state=42),
             "Ridge Regression": Ridge(alpha=1.0, tol=1e-3),
-            "Linear Regression": LinearRegression(),
+            "Decision Tree Regressor": DecisionTreeRegressor(max_depth=8, min_samples_leaf=2, random_state=42),
         }
 
 
@@ -337,10 +337,20 @@ def train_automl_pipeline(
     model_predictions = {}
 
     # Setup Cross-Validation Strategy on Training Set
+    # For large datasets (> 4000 rows), use a representative sample of the training set for CV validation to keep cloud response time fast
+    if len(X_train) > 4000:
+        cv_sample_size = 4000
+        sample_indices = np.random.RandomState(42).choice(len(X_train), size=cv_sample_size, replace=False)
+        X_cv = X_train[sample_indices]
+        y_cv = y_train.iloc[sample_indices] if hasattr(y_train, "iloc") else y_train[sample_indices]
+    else:
+        X_cv = X_train
+        y_cv = y_train
+
     if problem_type == "classification":
-        class_counts = pd.Series(y_train).value_counts()
+        class_counts = pd.Series(y_cv).value_counts()
         n_splits = 3 if (class_counts >= 3).all() else max(2, int(class_counts.min()))
-        if n_splits >= 2 and len(np.unique(y_train)) > 1:
+        if n_splits >= 2 and len(np.unique(y_cv)) > 1:
             cv = StratifiedKFold(n_splits=min(3, n_splits), shuffle=True, random_state=42)
         else:
             cv = 2
@@ -355,7 +365,7 @@ def train_automl_pipeline(
             cv_mean = 0.0
             cv_std = 0.0
             try:
-                cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring_metric)
+                cv_scores = cross_val_score(model, X_cv, y_cv, cv=cv, scoring=scoring_metric)
                 cv_mean = round(float(np.mean(cv_scores)), 4)
                 cv_std = round(float(np.std(cv_scores)), 4)
             except Exception as cv_err:
